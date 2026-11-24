@@ -49,6 +49,8 @@ const POS_TOLERANCE = 6;
 const SIZE_TOLERANCE = 40;
 // How often (ms) to check the pointer and keys during a drag.
 const POLL_MS = 20;
+// Shortest gap (ms) between window updates while dragging an edge.
+const FRAME_MS = 16;
 
 const DEFAULT_FRACTIONS = { long: [0.25, 0.5, 0.75], short: [0.5] };
 const RESET_BINDING = '<Super><Control>g';
@@ -394,24 +396,23 @@ function drawGridZones(layer) {
                     layer.add_child(box(`screen-snapper-zone-${res.rule}`, axisRect(W, L.a, L.b, S.a, S.b)));
             }
         }
-        drawGridLines(layer, grid, null);
+        drawGridLines(layer, grid);
         layer.add_child(box('screen-snapper-workarea', W));
     }
 }
 
-// Interior grid lines of one grid; `active` lines get a stronger style.
-function drawGridLines(layer, grid, active) {
+// Interior grid lines of one grid.
+function drawGridLines(layer, grid) {
     const W = grid.W;
     const landscape = isLandscape(W);
     for (const axis of ['long', 'short']) {
-        grid[axis].forEach((v, idx) => {
-            const isActive = active && active.some(a => a.axis === axis && a.idx === idx);
+        grid[axis].forEach(v => {
             const vertical = (axis === 'long') === landscape;
-            const w = isActive ? 6 : 2;
+            const w = 2;
             const r = vertical
                 ? { x: W.x + v - w / 2, y: W.y, width: w, height: W.height }
                 : { x: W.x, y: W.y + v - w / 2, width: W.width, height: w };
-            layer.add_child(box(isActive ? 'screen-snapper-gridline-active' : 'screen-snapper-gridline', r));
+            layer.add_child(box('screen-snapper-gridline', r));
         });
     }
 }
@@ -642,8 +643,7 @@ class ResizeSession {
             return;
         }
         global.display.set_cursor(RESIZE_CURSORS.get(op));
-        this.lines = fullLayer();
-        placeNearWindow(this.lines, win, true);
+        this.pending = 0;
 
         this.eventId = global.stage.connect('captured-event', (actor, event) => this._onEvent(event));
         // Safety net: finish if the button was released without an event.
@@ -662,20 +662,24 @@ class ResizeSession {
     _onEvent(event) {
         switch (event.type()) {
         case Clutter.EventType.MOTION:
-            this._update();
+            this._scheduleUpdate();
             return Clutter.EVENT_STOP;
-        case Clutter.EventType.BUTTON_RELEASE:
-            this.finish(true);
+        case Clutter.EventType.BUTTON_RELEASE: {
+            // Use the pointer and keys as they were at the release, not now:
+            // Ctrl may already be up by the time we get here.
+            const [x, y] = event.get_coords();
+            this.finish(true, [x, y, event.get_state()]);
             return Clutter.EVENT_STOP;
+        }
         case Clutter.EventType.KEY_PRESS:
             if (event.get_key_symbol() === Clutter.KEY_Escape) {
                 this.finish(false);
                 return Clutter.EVENT_STOP;
             }
-            this._update();
+            this._scheduleUpdate();
             return Clutter.EVENT_STOP;
         case Clutter.EventType.KEY_RELEASE:
-            this._update();
+            this._scheduleUpdate();
             return Clutter.EVENT_STOP;
         default:
             return Clutter.EVENT_STOP;
@@ -689,15 +693,27 @@ class ResizeSession {
         this.applied.set(win, r);
     }
 
-    _update() {
+    // Motion events can arrive far faster than windows can redraw; resizing
+    // on each one makes the windows fall behind. Update at most once a frame.
+    _scheduleUpdate() {
+        if (this.pending || this.done)
+            return;
+        this.pending = GLib.timeout_add(GLib.PRIORITY_HIGH, FRAME_MS, () => {
+            this.pending = 0;
+            this._update();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    // pointer: [x, y, mods], or omitted to read them now.
+    _update(pointer) {
         if (this.done)
             return;
-        const [px, py, mods] = global.get_pointer();
+        const [px, py, mods] = pointer || global.get_pointer();
         const { ctrl, shift } = keysHeld(mods);
         const grid = { W: this.grid0.W, long: [...this.grid0.long], short: [...this.grid0.short] };
         const spans = new Map([...this.spans0].map(([w, sp]) => [w, { l: [...sp.l], s: [...sp.s] }]));
         const mine = spans.get(this.window);
-        const active = [];
         let plain = null;
 
         for (const side of this.sides) {
@@ -707,7 +723,7 @@ class ResizeSession {
                 if (line === 'outer')
                     continue;   // Ctrl+drag on an outer edge does nothing
                 const t = grid[line.axis][line.idx] + delta;
-                active.push(moveLine(grid, [...spans.values()], line.axis, line.idx, t, shift));
+                moveLine(grid, [...spans.values()], line.axis, line.idx, t, shift);
             } else {
                 plain = plain || { ...this.startRect };
                 const r = plain;
@@ -740,15 +756,20 @@ class ResizeSession {
         }
         this.result = { ctrl, grid, spans };
 
-        this.lines.destroy_all_children();
-        if (ctrl)
-            drawGridLines(this.lines, grid, active);
     }
 
     // commit: false (Escape) puts everything back as it was.
-    finish(commit) {
+    // pointer: where the pointer and keys were when the button was released.
+    finish(commit, pointer) {
         if (this.done)
             return;
+        if (this.pending)
+            GLib.source_remove(this.pending);
+        this.pending = 0;
+        // Apply the final pointer position, which a pending update may not
+        // have reached yet.
+        if (commit && pointer)
+            this._update(pointer);
         this.done = true;
         if (this.timer)
             GLib.source_remove(this.timer);
@@ -756,9 +777,6 @@ class ResizeSession {
         if (this.eventId)
             global.stage.disconnect(this.eventId);
         this.eventId = 0;
-        if (this.lines)
-            this.lines.destroy();
-        this.lines = null;
         global.display.set_cursor(Meta.Cursor.DEFAULT);
         restarting = true;
         try {

@@ -41,11 +41,6 @@
     background-color: rgba(255, 255, 255, 0.75);
 }
 
-/* The grid line being moved by an edge drag. */
-.screen-snapper-gridline-active {
-    background-color: rgba(232, 116, 28, 0.95);
-}
-
 /* The band the pointer is in right now. */
 .screen-snapper-current-zone {
     border: 3px solid rgba(255, 255, 255, 1);
