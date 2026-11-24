@@ -1,46 +1,48 @@
 # Screen Snapper
 
-A Cinnamon extension (tested on Cinnamon 6.6, X11) that improves window snapping.
+A Cinnamon extension (tested on Cinnamon 6.6, X11) that replaces Cinnamon's
+edge tiling with an eighths snapping grid.
 
-## Features
+## Snapping grid
 
-**Keep snapped size.** Drag a window to a screen edge or corner and it snaps
-to that zone. When you later drag it back out, Cinnamon normally shrinks it
-back to its size from before it was snapped. With this extension it keeps the
-snapped size, and the cursor stays on the spot of the title bar you grabbed.
+Each monitor's usable area (inside the panels) is split into eighths:
+4 columns × 2 rows on a landscape monitor, 2 columns × 4 rows on a portrait
+one. Every grid line and every screen edge has a drop band 50 px deep on each
+side, so bands on interior lines are 100 px wide.
 
-**Snap overlay.** While dragging a window, hold a key to see where it can snap.
+Drag a window by its title bar. When the pointer is in a band, an orange
+preview shows where the window will go; let go to snap it there. In the open
+middle of a cell nothing snaps and the window just moves.
 
-Hold **Ctrl** to see the edge-tiling zones, where the window snaps when you
-drag it to an edge or corner:
-
-| Look | Meaning |
+| Where you drop | Window you get |
 |---|---|
-| Blue cells | The four quarters of each monitor; two side by side make a half |
-| Amber strips along the edges | Touch one with the pointer to snap to that half |
-| Pink corner squares | Touch one to snap to that quarter |
-| Green fill | The zone the window snaps to if you let go now |
+| A corner | The quarter of the screen in that corner |
+| A long-side edge (left/right in landscape, top/bottom in portrait) | ¾ of the screen against that edge; where you are along the edge picks which row (or column), or both on the middle line |
+| A short-side edge on the center line | Maximized |
+| A short-side edge on one of the other lines | A full-length strip along that edge |
+| Anywhere else in a band | Every cell touching where you drop: on a line, the cells either side; on a line crossing, the 4 cells around it; on an edge at the middle of a cell, that cell |
 
-Hold **Ctrl+Shift** to see the targets for Shift's edge snapping. With Shift
-held, the window keeps its current size and its edges jump to line up with
-monitor, panel and other windows' edges:
+Together these reach all 30 rectangles the grid allows.
 
-| Look | Meaning |
-|---|---|
-| Blue outlines | Each monitor, and its usable area inside the panels |
-| Amber outline, shaded | Other windows whose edges you can snap to |
-| Green outline | Where the dragged window will land |
-| Bright green lines | Edges the dragged window is lined up with |
+Cinnamon's own edge tiling is turned off while the extension is enabled and
+turned back on when you disable it. Super+arrow keyboard tiling still works.
 
-Ctrl doesn't change how the window snaps; it only shows the overlay. Let go of
-Ctrl and the overlay disappears.
+## Overlays
 
-Zone sizes are usually half the monitor, but if a window is already tiled to
-one side, the other side's zone fills the space that's left. The quarter
-outlines are estimates in some layouts; the green fill is always exactly
-what Cinnamon will do.
+Hold **Ctrl** while dragging to see every drop band, colored by rule, with the
+band under the pointer outlined.
 
-Colors live in `screen-snapper@local/stylesheet.css`.
+Hold **Shift** while dragging to use Cinnamon's edge snapping instead of the
+grid: the window keeps its size and its edges line up with monitor, panel and
+other windows' edges. Hold **Ctrl+Shift** to see those targets.
+
+Ctrl doesn't change where a window snaps; it only shows the overlay.
+
+## Keep tiled size
+
+Windows tiled with Super+arrows normally shrink back to their old size when
+you drag them out of the tile. This extension keeps the tiled size, and the
+pointer stays where you grabbed the title bar.
 
 ## Install
 
@@ -50,5 +52,8 @@ Colors live in `screen-snapper@local/stylesheet.css`.
 
 This symlinks `screen-snapper@local` into `~/.local/share/cinnamon/extensions/`
 and enables it. Run it again after editing to reload the extension.
+
+Colors live in `screen-snapper@local/stylesheet.css`. The band depth is
+`BAND` at the top of `screen-snapper@local/extension.js`.
 
 To turn it off, use System Settings → Extensions.

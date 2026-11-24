@@ -1,7 +1,7 @@
 {
     "uuid": "screen-snapper@local",
     "name": "Screen Snapper",
-    "description": "Keeps a snapped window's size when you drag it out of its snap zone, and shows an overlay of every edge-snap target while you Shift+drag.",
+    "description": "Snaps dragged windows to an eighths grid (4x2 landscape, 2x4 portrait), with Ctrl/Ctrl+Shift overlays and keep-tiled-size.",
     "cinnamon-version": [
         "6.0",
         "6.2",

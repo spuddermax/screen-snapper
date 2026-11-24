@@ -1,5 +1,50 @@
-/* Overlay shown while dragging a window with Ctrl (or Ctrl+Shift) held.
-   Tweak colors here, then run ./install.sh to reload. */
+/* Screen Snapper colors. Edit, then run ./install.sh to reload. */
+
+/* ---- Grid snapping (always on while dragging) ---- */
+
+/* Where the window goes if you let go now. Drawn under the dragged window. */
+.screen-snapper-preview {
+    border: 3px solid rgba(232, 116, 28, 1);
+    background-color: rgba(232, 116, 28, 0.22);
+    border-radius: 4px;
+}
+
+/* ---- Ctrl: the grid's drop bands, colored by rule ---- */
+
+/* Covers every cell touching the spot you drop on. */
+.screen-snapper-zone-touch {
+    background-color: rgba(61, 123, 224, 0.30);
+}
+
+/* Corner: quarter of the screen. */
+.screen-snapper-zone-corner {
+    background-color: rgba(138, 92, 214, 0.55);
+}
+
+/* Long-side edge: 3/4 against that edge. */
+.screen-snapper-zone-edge {
+    background-color: rgba(18, 153, 138, 0.45);
+}
+
+/* Short-side edge, quarter line: full-length strip along that edge. */
+.screen-snapper-zone-strip {
+    background-color: rgba(107, 143, 26, 0.55);
+}
+
+/* Short-side edge, center line: maximize. */
+.screen-snapper-zone-max {
+    background-color: rgba(208, 69, 122, 0.60);
+}
+
+/* Lines dividing each screen into eighths. */
+.screen-snapper-gridline {
+    background-color: rgba(255, 255, 255, 0.75);
+}
+
+/* The band the pointer is in right now. */
+.screen-snapper-current-zone {
+    border: 3px solid rgba(255, 255, 255, 1);
+}
 
 /* ---- Shared ---- */
 
@@ -8,31 +53,7 @@
     border: 2px solid rgba(120, 170, 255, 0.9);
 }
 
-/* ---- Ctrl: edge-tiling zones ---- */
-
-/* A quarter of a monitor. Two side by side make a half. */
-.screen-snapper-zone {
-    border: 1px solid rgba(120, 170, 255, 0.8);
-    background-color: rgba(120, 170, 255, 0.10);
-}
-
-/* Edge strip: touch it with the pointer to snap to that half. */
-.screen-snapper-trigger {
-    background-color: rgba(255, 200, 80, 0.85);
-}
-
-/* Corner: touch it to snap to that quarter. */
-.screen-snapper-corner {
-    background-color: rgba(255, 90, 200, 1);
-}
-
-/* The zone the window snaps to if you let go now. */
-.screen-snapper-active {
-    border: 3px solid rgba(80, 220, 120, 1);
-    background-color: rgba(80, 220, 120, 0.25);
-}
-
-/* ---- Ctrl+Shift: edge snapping at the window's current size ---- */
+/* ---- Ctrl+Shift: Shift's edge snapping at the window's current size ---- */
 
 /* Whole monitor. */
 .screen-snapper-monitor {
