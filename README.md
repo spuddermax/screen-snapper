@@ -10,9 +10,14 @@ Each monitor's usable area (inside the panels) is split into eighths:
 one. Every grid line and every screen edge has a drop band 50 px deep on each
 side, so bands on interior lines are 100 px wide.
 
-Drag a window by its title bar. When the pointer is in a band, an orange
-preview shows where the window will go; let go to snap it there. In the open
-middle of a cell nothing snaps and the window just moves.
+Snapping only happens while you hold **Ctrl**. Drag a window by its title
+bar, hold Ctrl, and the drop bands appear with the band under the pointer
+outlined. When the pointer is in a band, an orange preview shows where the
+window will go; let go of the mouse while still holding Ctrl to snap it there.
+In the open middle of a cell nothing snaps.
+
+Without Ctrl, dragging just moves the window and clicking does nothing.
+Letting go of Ctrl before you drop cancels the snap.
 
 | Where you drop | Window you get |
 |---|---|
@@ -27,16 +32,11 @@ Together these reach all 30 rectangles the grid allows.
 Cinnamon's own edge tiling is turned off while the extension is enabled and
 turned back on when you disable it. Super+arrow keyboard tiling still works.
 
-## Overlays
-
-Hold **Ctrl** while dragging to see every drop band, colored by rule, with the
-band under the pointer outlined.
+## Shift snapping
 
 Hold **Shift** while dragging to use Cinnamon's edge snapping instead of the
 grid: the window keeps its size and its edges line up with monitor, panel and
 other windows' edges. Hold **Ctrl+Shift** to see those targets.
-
-Ctrl doesn't change where a window snaps; it only shows the overlay.
 
 ## Keep tiled size
 

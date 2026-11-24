@@ -5,13 +5,15 @@
 // 1. Eighths grid. Each monitor's usable area is split into eighths: 4 columns
 //    x 2 rows in landscape, 2 columns x 4 rows in portrait. Every grid line and
 //    screen edge has a drop band BAND px deep on each side. Drag a window with
-//    the pointer in a band and let go, and it snaps to the window that band
-//    stands for (see resolve()). In the open middle of a cell nothing snaps.
-//    Cinnamon's own edge tiling is switched off while this is enabled.
+//    Ctrl held, and when the pointer is in a band an overlay shows every band
+//    plus where the window will go; let go (still holding Ctrl) and it snaps
+//    there (see resolve()). In the open middle of a cell nothing snaps.
+//    Without Ctrl, dragging just moves the window. Cinnamon's own edge tiling
+//    is switched off while this is enabled.
 //
-// 2. Overlay. Hold Ctrl while dragging to see every drop band, colored by
-//    rule. Add Shift (Ctrl+Shift) to see the targets for Muffin's Shift edge
-//    snapping instead. Holding Shift turns grid snapping off for the drag.
+// 2. Ctrl+Shift. Shift makes Muffin snap the window's edges, at its current
+//    size, to monitor, panel and other windows' edges. With Ctrl+Shift held
+//    we show those targets instead of the grid, and the grid doesn't snap.
 //
 // 3. Keep snapped size. Windows tiled by Cinnamon's keyboard shortcuts
 //    (Super+arrows) still shrink back to their old size when dragged out of
@@ -28,6 +30,9 @@ const Clutter = imports.gi.Clutter;
 const BAND = 50;
 // How close (px) two edges must be to count as lined up (Ctrl+Shift view).
 const ALIGN_TOLERANCE = 1;
+// How far (px) the pointer must move before a press on the title bar counts
+// as a drag rather than a click.
+const DRAG_THRESHOLD = 8;
 // How often (ms) to check the pointer and keys during a drag.
 const POLL_MS = 20;
 
@@ -315,6 +320,10 @@ class DragSession {
         this.base = null;       // overlay below the dragged window
         this.front = null;      // overlay above the dragged window
         this.edges = null;
+        // Where the pointer was when the grab started, to tell a click from
+        // a drag.
+        [this.startX, this.startY] = global.get_pointer();
+        this.moved = false;
 
         this.signals = [
             [win, win.connect('position-changed', () => this._updateLanding())],
@@ -336,7 +345,14 @@ class DragSession {
         if (mode !== this.mode)
             this._setMode(mode);
 
-        const canSnap = this.byPointer && !shift && this.window.allows_resize();
+        if (!this.moved &&
+            Math.hypot(px - this.startX, py - this.startY) >= DRAG_THRESHOLD)
+            this.moved = true;
+
+        // Grid snapping only happens during a real drag with Ctrl held (and
+        // not Shift, which is Muffin's own edge snapping).
+        const canSnap = this.byPointer && this.moved && ctrl && !shift &&
+            this.window.allows_resize();
         const target = canSnap ? gridTarget(px, py) : null;
         const oldZone = this.target ? this.target.zone : null;
         const oldRect = this.target ? this.target.rect : null;
