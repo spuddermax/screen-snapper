@@ -1,21 +1,29 @@
 // Screen Snapper
 //
-// Window snapping for Cinnamon (Muffin), replacing Cinnamon's edge tiling:
+// Window snapping for Cinnamon (Muffin), replacing Cinnamon's edge tiling.
 //
-// 1. Eighths grid. Each monitor's usable area is split into eighths: 4 columns
+// 1. Eighths grid. Each monitor's usable area is split into a grid: 4 columns
 //    x 2 rows in landscape, 2 columns x 4 rows in portrait. Every grid line and
 //    screen edge has a drop band BAND px deep on each side. Drag a window with
-//    Ctrl held, and when the pointer is in a band an overlay shows every band
-//    plus where the window will go; let go (still holding Ctrl) and it snaps
-//    there (see resolve()). In the open middle of a cell nothing snaps.
-//    Without Ctrl, dragging just moves the window. Cinnamon's own edge tiling
-//    is switched off while this is enabled.
+//    Ctrl held, and an overlay shows every band plus where the window will go;
+//    let go (still holding Ctrl) and it snaps there (see resolve()). In the
+//    open middle of a cell nothing snaps. Without Ctrl, dragging just moves
+//    the window. Cinnamon's own edge tiling is off while this is enabled.
 //
-// 2. Ctrl+Shift. Shift makes Muffin snap the window's edges, at its current
-//    size, to monitor, panel and other windows' edges. With Ctrl+Shift held
-//    we show those targets instead of the grid, and the grid doesn't snap.
+// 2. Movable grid lines. Ctrl+drag the edge of a window the grid placed and
+//    the grid line under that edge moves across the whole monitor; every grid
+//    window with an edge on it follows. Ctrl+Shift snaps the line to the even
+//    positions. When a line reaches its MIN_CELL limit next to a line hidden
+//    inside a window, the drag carries on with that line (see moveLine()).
+//    Ctrl+drag on an outer edge does nothing. Without Ctrl, the edge resizes
+//    just that window and it leaves the grid. Keys are checked the whole
+//    drag. Each monitor and workspace keeps its own grid, saved to disk;
+//    Super+Ctrl+G resets the one under the pointer.
 //
-// 3. Keep snapped size. Windows tiled by Cinnamon's keyboard shortcuts
+// 3. Ctrl+Shift while moving a window shows the targets for Muffin's Shift
+//    edge snapping (window keeps its size) instead of the grid.
+//
+// 4. Keep tiled size. Windows tiled by Cinnamon's keyboard shortcuts
 //    (Super+arrows) still shrink back to their old size when dragged out of
 //    the tile. We put the tiled size back as soon as the window untiles.
 
@@ -24,32 +32,47 @@ const GLib = imports.gi.GLib;
 const Gio = imports.gi.Gio;
 const St = imports.gi.St;
 const Clutter = imports.gi.Clutter;
+const Main = imports.ui.main;
 
 // Depth (px) of each drop band on either side of a grid line, and inward
 // from each screen edge.
 const BAND = 50;
+// Grid cells never get narrower than this (px) when moving lines.
+const MIN_CELL = 200;
+// How far (px) the pointer must move before a press counts as a drag.
+const DRAG_THRESHOLD = 8;
 // How close (px) two edges must be to count as lined up (Ctrl+Shift view).
 const ALIGN_TOLERANCE = 1;
-// How far (px) the pointer must move before a press on the title bar counts
-// as a drag rather than a click.
-const DRAG_THRESHOLD = 8;
+// How far a grid window may be from its grid rect and still count as on the
+// grid. Some apps (terminals) size in whole character cells.
+const POS_TOLERANCE = 6;
+const SIZE_TOLERANCE = 40;
 // How often (ms) to check the pointer and keys during a drag.
 const POLL_MS = 20;
 
+const DEFAULT_FRACTIONS = { long: [0.25, 0.5, 0.75], short: [0.5] };
+const RESET_BINDING = '<Super><Control>g';
+const RESET_NAME = 'screen-snapper-reset-grid';
 const MUFFIN_SCHEMA = 'org.cinnamon.muffin';
 
 let beginId = 0;
 let endId = 0;
-// True while we restart a grab ourselves, so our own grab-op-end/begin
+// True while we end or start a grab ourselves, so our own grab-op-end/begin
 // signals are ignored.
 let restarting = false;
 let keepSize = null;   // KeepSize for the current drag, if any
-let session = null;    // DragSession for the current drag, if any
+let session = null;    // DragSession or ResizeSession for the current drag
 let muffinSettings = null;
 let turnedOffEdgeTiling = false;
 
 function rectOf(r) {
     return { x: r.x, y: r.y, width: r.width, height: r.height };
+}
+
+function sameRect(a, b) {
+    if (!a || !b)
+        return a === b;
+    return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
 }
 
 function isTiled(win) {
@@ -59,6 +82,32 @@ function isTiled(win) {
 
 function isMoveOp(op) {
     return op === Meta.GrabOp.MOVING || op === Meta.GrabOp.KEYBOARD_MOVING;
+}
+
+// Window sides moved by each pointer resize.
+const RESIZE_SIDES = new Map([
+    [Meta.GrabOp.RESIZING_E, ['right']],
+    [Meta.GrabOp.RESIZING_W, ['left']],
+    [Meta.GrabOp.RESIZING_N, ['top']],
+    [Meta.GrabOp.RESIZING_S, ['bottom']],
+    [Meta.GrabOp.RESIZING_NE, ['top', 'right']],
+    [Meta.GrabOp.RESIZING_NW, ['top', 'left']],
+    [Meta.GrabOp.RESIZING_SE, ['bottom', 'right']],
+    [Meta.GrabOp.RESIZING_SW, ['bottom', 'left']],
+]);
+const RESIZE_CURSORS = new Map([
+    [Meta.GrabOp.RESIZING_E, Meta.Cursor.EAST_RESIZE],
+    [Meta.GrabOp.RESIZING_W, Meta.Cursor.WEST_RESIZE],
+    [Meta.GrabOp.RESIZING_N, Meta.Cursor.NORTH_RESIZE],
+    [Meta.GrabOp.RESIZING_S, Meta.Cursor.SOUTH_RESIZE],
+    [Meta.GrabOp.RESIZING_NE, Meta.Cursor.NE_RESIZE],
+    [Meta.GrabOp.RESIZING_NW, Meta.Cursor.NW_RESIZE],
+    [Meta.GrabOp.RESIZING_SE, Meta.Cursor.SE_RESIZE],
+    [Meta.GrabOp.RESIZING_SW, Meta.Cursor.SW_RESIZE],
+]);
+
+function isKeyboardResizeOp(op) {
+    return op >= Meta.GrabOp.KEYBOARD_RESIZING_UNKNOWN && op <= Meta.GrabOp.KEYBOARD_RESIZING_SE;
 }
 
 // Muffin emits grab-op-begin/end as (display, display, window, op); stock
@@ -71,6 +120,17 @@ function grabArgs(args) {
 
 function activeWorkspace() {
     return global.workspace_manager.get_active_workspace();
+}
+
+function workspaceAt(index) {
+    return global.workspace_manager.get_workspace_by_index(index);
+}
+
+function keysHeld(mods) {
+    return {
+        ctrl: (mods & Clutter.ModifierType.CONTROL_MASK) !== 0,
+        shift: (mods & Clutter.ModifierType.SHIFT_MASK) !== 0,
+    };
 }
 
 function box(styleClass, r) {
@@ -92,34 +152,151 @@ function fullLayer() {
     });
 }
 
+// Put an actor just below or above a window (or on top of all windows if
+// the window's actor isn't in the window group).
+function placeNearWindow(actor, win, above) {
+    const group = global.window_group;
+    if (actor.get_parent() !== group)
+        group.add_child(actor);
+    const winActor = win.get_compositor_private();
+    if (winActor && winActor.get_parent() === group) {
+        if (above)
+            group.set_child_above_sibling(actor, winActor);
+        else
+            group.set_child_below_sibling(actor, winActor);
+    } else {
+        group.set_child_above_sibling(actor, null);
+    }
+}
+
+// Move and resize a window to a frame rect. Muffin ignores the position
+// passed to move_resize_frame, so move as well.
+function placeWindow(win, r) {
+    if (win.get_maximized() !== 0)
+        win.unmaximize(Meta.MaximizeFlags.BOTH);
+    win.move_resize_frame(true, r.x, r.y, r.width, r.height);
+    win.move_frame(true, r.x, r.y);
+}
+
 // ---------------------------------------------------------------------------
-// Eighths grid
+// Saved grids, one per monitor per workspace, as fractions of the work area.
+
+let gridFractions = {};
+
+function gridKey(monitor, wsIndex) {
+    const g = global.display.get_monitor_geometry(monitor);
+    return `${monitor}:${g.width}x${g.height}/${wsIndex}`;
+}
+
+function configFile(name) {
+    return Gio.File.new_for_path(GLib.build_filenamev(
+        [GLib.get_user_config_dir(), 'screen-snapper', name]));
+}
+
+function writeConfig(name, text) {
+    const file = configFile(name);
+    try {
+        file.get_parent().make_directory_with_parents(null);
+    } catch (e) {
+        // Directory already exists.
+    }
+    try {
+        file.replace_contents(text, null, false, Gio.FileCreateFlags.REPLACE_DESTINATION, null);
+    } catch (e) {
+        global.logError(`screen-snapper: could not write ${file.get_path()}: ${e}`);
+    }
+}
+
+function loadGrids() {
+    gridFractions = {};
+    try {
+        const [, bytes] = configFile('grids.json').load_contents(null);
+        gridFractions = JSON.parse(new TextDecoder().decode(bytes)) || {};
+    } catch (e) {
+        // No saved grids yet.
+    }
+}
+
+function saveGrids() {
+    writeConfig('grids.json', JSON.stringify(gridFractions, null, 1));
+}
+
+// Lengths of a work area along the long (4-unit) and short (2-unit) axes.
+function lens(W) {
+    return W.width >= W.height ? [W.width, W.height] : [W.height, W.width];
+}
+
+function isLandscape(W) {
+    return W.width >= W.height;
+}
+
+// A grid: the work area, plus line positions along each axis as offsets
+// from the work area's start (interior lines only).
+function gridFor(monitor, wsIndex) {
+    const ws = workspaceAt(wsIndex) || activeWorkspace();
+    const W = rectOf(ws.get_work_area_for_monitor(monitor));
+    const [L, S] = lens(W);
+    const f = gridFractions[gridKey(monitor, wsIndex)] || DEFAULT_FRACTIONS;
+    return {
+        W,
+        long: f.long.map(x => Math.round(x * L)),
+        short: f.short.map(x => Math.round(x * S)),
+    };
+}
+
+function evenLines(W, axis) {
+    const [L, S] = lens(W);
+    const len = axis === 'long' ? L : S;
+    return DEFAULT_FRACTIONS[axis].map(x => Math.round(x * len));
+}
+
+function saveGrid(monitor, wsIndex, grid) {
+    const key = gridKey(monitor, wsIndex);
+    const [L, S] = lens(grid.W);
+    const even = ['long', 'short'].every(axis =>
+        grid[axis].every((v, i) => Math.abs(v - evenLines(grid.W, axis)[i]) <= 1));
+    if (even)
+        delete gridFractions[key];
+    else
+        gridFractions[key] = { long: grid.long.map(v => v / L), short: grid.short.map(v => v / S) };
+    saveGrids();
+}
+
+// Line positions along an axis, including both screen edges.
+function positions(grid, axis) {
+    const [L, S] = lens(grid.W);
+    return axis === 'long' ? [0, ...grid.long, L] : [0, ...grid.short, S];
+}
+
+// ---------------------------------------------------------------------------
+// Snapping into the grid
 //
 // Positions along an axis are classified as an edge band, a line band or the
-// open middle of a cell. The long axis has 4 units, the short axis 2.
+// open middle of a cell. The long axis has 4 cells, the short axis 2. A span
+// is a pair of cell numbers [first, last]; cell c lies between lines c-1 and
+// c (line 0 and line n are the screen edges).
 
-// Bands and cells along one axis of length len split into n units, as
-// offsets from the start of the axis.
-function regions(len, n) {
-    const p = i => i * len / n;
+// Bands and cells along one axis, given its line positions p.
+function regions(p) {
+    const n = p.length - 1;
     const out = [{ kind: 'edge', i: 0, a: 0, b: BAND }];
     for (let k = 1; k <= n; k++) {
-        out.push({ kind: 'cell', i: k, a: p(k - 1) + BAND, b: p(k) - BAND });
+        out.push({ kind: 'cell', i: k, a: p[k - 1] + BAND, b: p[k] - BAND });
         if (k < n)
-            out.push({ kind: 'line', i: k, a: p(k) - BAND, b: p(k) + BAND });
+            out.push({ kind: 'line', i: k, a: p[k] - BAND, b: p[k] + BAND });
     }
-    out.push({ kind: 'edge', i: n, a: len - BAND, b: len });
+    out.push({ kind: 'edge', i: n, a: p[n] - BAND, b: p[n] });
     return out;
 }
 
-function classify(pos, len, n) {
-    const regs = regions(len, n);
-    pos = Math.min(Math.max(pos, 0), len - 1);
+function classify(pos, p) {
+    const regs = regions(p);
+    pos = Math.min(Math.max(pos, 0), p[p.length - 1] - 1);
     return regs.find(r => pos >= r.a && pos < r.b) || regs[regs.length - 1];
 }
 
-// Units covered by the cells touching a position: a cell itself, the two
-// cells either side of a line, or the cell next to an edge.
+// Cells touching a position: a cell itself, the two cells either side of a
+// line, or the cell next to an edge.
 function coreSpan(c, n) {
     if (c.kind === 'cell')
         return [c.i, c.i];
@@ -128,8 +305,8 @@ function coreSpan(c, n) {
     return c.i === 0 ? [1, 1] : [n, n];
 }
 
-// L: position on the long (4-unit) axis, S: on the short (2-unit) axis.
-// Returns the units the window covers on each axis, or null for no snap.
+// L: position on the long axis, S: on the short axis. Returns the spans the
+// window covers on each axis, or null for no snap.
 function resolve(L, S) {
     const Le = L.kind === 'edge';
     const Se = S.kind === 'edge';
@@ -148,6 +325,20 @@ function resolve(L, S) {
     return { l: coreSpan(L, 4), s: coreSpan(S, 2), rule: 'touch' };
 }
 
+// Screen rect from offsets along the long and short axes.
+function axisRect(W, la, lb, sa, sb) {
+    return isLandscape(W)
+        ? { x: W.x + la, y: W.y + sa, width: lb - la, height: sb - sa }
+        : { x: W.x + sa, y: W.y + la, width: sb - sa, height: lb - la };
+}
+
+// Window frame rect for spans on a grid.
+function gridRect(grid, spans) {
+    const pl = positions(grid, 'long');
+    const ps = positions(grid, 'short');
+    return axisRect(grid.W, pl[spans.l[0] - 1], pl[spans.l[1]], ps[spans.s[0] - 1], ps[spans.s[1]]);
+}
+
 function monitorAt(px, py) {
     const n = global.display.get_n_monitors();
     for (let i = 0; i < n; i++) {
@@ -158,100 +349,453 @@ function monitorAt(px, py) {
     return global.display.get_current_monitor();
 }
 
-// Start and length in px of a span of units along one axis.
-function spanPx(start, len, n, span) {
-    const a = start + Math.round((span[0] - 1) * len / n);
-    const b = start + Math.round(span[1] * len / n);
-    return [a, b - a];
-}
-
-// Window rect (frame coordinates) for a resolved grid result.
-function gridRect(W, res) {
-    const landscape = W.width >= W.height;
-    let x, y, width, height;
-    if (landscape) {
-        [x, width] = spanPx(W.x, W.width, 4, res.l);
-        [y, height] = spanPx(W.y, W.height, 2, res.s);
-    } else {
-        [x, width] = spanPx(W.x, W.width, 2, res.s);
-        [y, height] = spanPx(W.y, W.height, 4, res.l);
-    }
-    return { x, y, width, height };
-}
-
-// Rect of a zone (pair of regions) in screen coordinates.
-function zoneRect(W, L, S) {
-    const landscape = W.width >= W.height;
-    const [xr, yr] = landscape ? [L, S] : [S, L];
-    return { x: W.x + xr.a, y: W.y + yr.a, width: xr.b - xr.a, height: yr.b - yr.a };
-}
-
 // What dropping with the pointer at (px, py) would do, or null.
 function gridTarget(px, py) {
     const monitor = monitorAt(px, py);
-    const W = rectOf(activeWorkspace().get_work_area_for_monitor(monitor));
-    const landscape = W.width >= W.height;
-    const [lpos, llen, spos, slen] = landscape
-        ? [px - W.x, W.width, py - W.y, W.height]
-        : [py - W.y, W.height, px - W.x, W.width];
-    const L = classify(lpos, llen, 4);
-    const S = classify(spos, slen, 2);
+    const wsIndex = activeWorkspace().index();
+    const grid = gridFor(monitor, wsIndex);
+    const W = grid.W;
+    const [lpos, spos] = isLandscape(W) ? [px - W.x, py - W.y] : [py - W.y, px - W.x];
+    const pl = positions(grid, 'long');
+    const ps = positions(grid, 'short');
+    const L = classify(lpos, pl);
+    const S = classify(spos, ps);
     const res = resolve(L, S);
     if (!res)
         return null;
-    return { monitor, res, rect: gridRect(W, res), zone: zoneRect(W, L, S) };
-}
-
-function sameRect(a, b) {
-    if (!a || !b)
-        return a === b;
-    return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+    return {
+        monitor, wsIndex, res,
+        rect: gridRect(grid, res),
+        zone: axisRect(W, L.a, L.b, S.a, S.b),
+    };
 }
 
 function applyTarget(win, target) {
     if (target.res.rule === 'max') {
+        untrack(win);
         win.maximize(Meta.MaximizeFlags.BOTH);
         return;
     }
-    if (win.get_maximized() !== 0)
-        win.unmaximize(Meta.MaximizeFlags.BOTH);
-    const r = target.rect;
-    // Muffin ignores the position passed to move_resize_frame, so move too.
-    win.move_resize_frame(true, r.x, r.y, r.width, r.height);
-    win.move_frame(true, r.x, r.y);
+    placeWindow(win, target.rect);
+    track(win, target.monitor, target.wsIndex, target.res.l, target.res.s);
 }
 
 // Every drop band on every monitor, colored by rule, plus the grid lines.
 function drawGridZones(layer) {
-    const ws = activeWorkspace();
+    const wsIndex = activeWorkspace().index();
     const n = global.display.get_n_monitors();
     for (let i = 0; i < n; i++) {
-        const W = rectOf(ws.get_work_area_for_monitor(i));
-        const landscape = W.width >= W.height;
-        const [llen, slen] = landscape ? [W.width, W.height] : [W.height, W.width];
-        for (const L of regions(llen, 4)) {
-            for (const S of regions(slen, 2)) {
+        const grid = gridFor(i, wsIndex);
+        const W = grid.W;
+        for (const L of regions(positions(grid, 'long'))) {
+            for (const S of regions(positions(grid, 'short'))) {
                 const res = resolve(L, S);
                 if (res)
-                    layer.add_child(box(`screen-snapper-zone-${res.rule}`, zoneRect(W, L, S)));
+                    layer.add_child(box(`screen-snapper-zone-${res.rule}`, axisRect(W, L.a, L.b, S.a, S.b)));
             }
         }
-        const [cols, rows] = landscape ? [4, 2] : [2, 4];
-        for (let c = 1; c < cols; c++) {
-            const x = W.x + Math.round(c * W.width / cols);
-            layer.add_child(box('screen-snapper-gridline', { x: x - 1, y: W.y, width: 2, height: W.height }));
-        }
-        for (let r = 1; r < rows; r++) {
-            const y = W.y + Math.round(r * W.height / rows);
-            layer.add_child(box('screen-snapper-gridline', { x: W.x, y: y - 1, width: W.width, height: 2 }));
-        }
+        drawGridLines(layer, grid, null);
         layer.add_child(box('screen-snapper-workarea', W));
     }
 }
 
+// Interior grid lines of one grid; `active` lines get a stronger style.
+function drawGridLines(layer, grid, active) {
+    const W = grid.W;
+    const landscape = isLandscape(W);
+    for (const axis of ['long', 'short']) {
+        grid[axis].forEach((v, idx) => {
+            const isActive = active && active.some(a => a.axis === axis && a.idx === idx);
+            const vertical = (axis === 'long') === landscape;
+            const w = isActive ? 6 : 2;
+            const r = vertical
+                ? { x: W.x + v - w / 2, y: W.y, width: w, height: W.height }
+                : { x: W.x, y: W.y + v - w / 2, width: W.width, height: w };
+            layer.add_child(box(isActive ? 'screen-snapper-gridline-active' : 'screen-snapper-gridline', r));
+        });
+    }
+}
+
 // ---------------------------------------------------------------------------
-// Ctrl+Shift view: Muffin's Shift edge snapping keeps the window's size and
-// lines its edges up with monitor, panel and other windows' edges.
+// Windows placed by the grid. Each remembers its monitor, workspace and
+// spans, and follows line moves while it stays where the grid put it.
+
+const tracked = new Map();   // MetaWindow -> { monitor, ws, l, s, unmanagedId }
+
+function track(win, monitor, wsIndex, l, s) {
+    const old = tracked.get(win);
+    const unmanagedId = old ? old.unmanagedId : win.connect('unmanaged', () => untrack(win));
+    tracked.set(win, { monitor, ws: wsIndex, l: [...l], s: [...s], unmanagedId });
+}
+
+function untrack(win) {
+    const info = tracked.get(win);
+    if (!info)
+        return;
+    win.disconnect(info.unmanagedId);
+    tracked.delete(win);
+}
+
+function untrackAll() {
+    for (const win of [...tracked.keys()])
+        untrack(win);
+}
+
+// Is a tracked window still where its grid put it?
+function isOnGrid(win, info, grid) {
+    if (win.get_monitor() !== info.monitor || win.get_maximized() !== 0 || win.is_fullscreen())
+        return false;
+    const ws = win.get_workspace();
+    if (!win.is_on_all_workspaces() && (!ws || ws.index() !== info.ws))
+        return false;
+    const want = gridRect(grid, info);
+    const r = win.get_frame_rect();
+    return Math.abs(r.x - want.x) <= POS_TOLERANCE && Math.abs(r.y - want.y) <= POS_TOLERANCE &&
+        Math.abs(r.width - want.width) <= SIZE_TOLERANCE && Math.abs(r.height - want.height) <= SIZE_TOLERANCE;
+}
+
+// Every span pair a window can cover.
+function allSpans() {
+    const out = [];
+    for (let a = 1; a <= 4; a++)
+        for (let b = a; b <= 4; b++)
+            for (const s of [[1, 1], [2, 2], [1, 2]])
+                if (!(a === 1 && b === 4 && s[0] === 1 && s[1] === 2))   // that's maximized
+                    out.push({ l: [a, b], s });
+    return out;
+}
+
+// Start tracking untracked windows that sit exactly on a grid rect, so the
+// grid still knows its windows after Cinnamon or the extension restarts.
+function adoptWindows(monitor, wsIndex, grid) {
+    const ws = workspaceAt(wsIndex);
+    if (!ws)
+        return;
+    const spans = allSpans();
+    for (const win of ws.list_windows()) {
+        if (tracked.has(win) || win.get_monitor() !== monitor || win.minimized ||
+            win.get_window_type() !== Meta.WindowType.NORMAL || !win.allows_resize())
+            continue;
+        for (const sp of spans) {
+            const info = { monitor, ws: wsIndex, l: sp.l, s: sp.s };
+            if (isOnGrid(win, info, grid)) {
+                track(win, monitor, wsIndex, sp.l, sp.s);
+                break;
+            }
+        }
+    }
+}
+
+// Tracked windows on a monitor and workspace that are still on its grid.
+// Ones that have wandered off are dropped from tracking.
+function gridMembers(monitor, wsIndex, grid) {
+    adoptWindows(monitor, wsIndex, grid);
+    const out = [];
+    for (const [win, info] of [...tracked]) {
+        if (info.monitor !== monitor || info.ws !== wsIndex)
+            continue;
+        if (isOnGrid(win, info, grid))
+            out.push(win);
+        else
+            untrack(win);
+    }
+    return out;
+}
+
+// Super+Ctrl+G: put the grid on the monitor under the pointer, on the current
+// workspace, back to even eighths, and move its windows to match.
+function resetGrid() {
+    const [px, py] = global.get_pointer();
+    const monitor = monitorAt(px, py);
+    const wsIndex = activeWorkspace().index();
+    const members = gridMembers(monitor, wsIndex, gridFor(monitor, wsIndex));
+    delete gridFractions[gridKey(monitor, wsIndex)];
+    saveGrids();
+    const grid = gridFor(monitor, wsIndex);
+    for (const win of members)
+        placeWindow(win, gridRect(grid, tracked.get(win)));
+}
+
+// ---------------------------------------------------------------------------
+// Moving grid lines
+//
+// Which line a window side sits on: { axis, idx } (idx into grid[axis]), or
+// 'outer' for a side on the screen edge.
+function sideLine(W, spans, side) {
+    const map = isLandscape(W)
+        ? { left: ['long', 0], right: ['long', 1], top: ['short', 0], bottom: ['short', 1] }
+        : { top: ['long', 0], bottom: ['long', 1], left: ['short', 0], right: ['short', 1] };
+    const [axis, end] = map[side];
+    const span = axis === 'long' ? spans.l : spans.s;
+    const n = axis === 'long' ? 4 : 2;
+    if (end === 0)
+        return span[0] > 1 ? { axis, idx: span[0] - 2 } : 'outer';
+    return span[1] < n ? { axis, idx: span[1] - 1 } : 'outer';
+}
+
+// Put line idx at t, within MIN_CELL of its neighbours. With Ctrl+Shift it
+// snaps to the nearest even position in reach.
+function setLine(grid, axis, idx, t, shift) {
+    const p = positions(grid, axis);
+    const lo = p[idx] + MIN_CELL;
+    const hi = p[idx + 2] - MIN_CELL;
+    if (shift) {
+        const even = evenLines(grid.W, axis).filter(x => x >= lo && x <= hi);
+        if (even.length)
+            t = even.reduce((a, b) => Math.abs(b - t) < Math.abs(a - t) ? b : a);
+    }
+    grid[axis][idx] = Math.round(Math.min(Math.max(t, lo), hi));
+}
+
+// Would handing a drag from line a to line j squeeze a window to nothing?
+// (A window covering only the cell between them would vanish.)
+function canHandoff(spansList, key, a, j) {
+    return spansList.every(sp => {
+        const [c0, c1] = sp[key];
+        return j < a ? !(c0 === a && c1 === a) : !(c0 === a + 1 && c1 === a + 1);
+    });
+}
+
+function handoff(spansList, key, a, j) {
+    for (const sp of spansList) {
+        const span = sp[key];
+        if (span[1] === a)
+            span[1] = j;           // right or bottom edge on line a
+        if (span[0] === a + 1)
+            span[0] = j + 1;       // left or top edge on line a
+    }
+}
+
+// Move line idx on an axis to t. Where it would hit its MIN_CELL limit next
+// to another line, the drag hands off to that line instead of stopping: every
+// window edge on the line being dragged moves onto the next line, which takes
+// over at exactly t, and the dragged line goes back to its starting place
+// (inside a window now). The edge you see never jumps. It doesn't hand off if
+// that would squeeze a window to nothing; then the limit holds.
+// Returns the line that ended up moving.
+function moveLine(grid, spansList, axis, idx, t, shift) {
+    const key = axis === 'long' ? 'l' : 's';
+    const n = axis === 'long' ? 4 : 2;
+    const pos = i => positions(grid, axis)[i];
+    let a = idx + 1;   // line number; 0 and n are the screen edges
+    for (;;) {
+        const dir = t < pos(a) ? -1 : t > pos(a) ? 1 : 0;
+        const j = a + dir;
+        if (!dir || j < 1 || j > n - 1)
+            break;
+        const reached = dir < 0 ? t <= pos(j) + MIN_CELL : t >= pos(j) - MIN_CELL;
+        if (!reached || !canHandoff(spansList, key, a, j))
+            break;
+        handoff(spansList, key, a, j);
+        a = j;
+    }
+    setLine(grid, axis, a - 1, t, shift);
+    return { axis, idx: a - 1 };
+}
+
+// One edge (or corner) drag on a grid window. Muffin's own resize is ended
+// and the drag is run here, under a modal grab, so every grid window can be
+// placed exactly. Each update starts again from the layout at the start of
+// the drag and applies the keys held right now.
+class ResizeSession {
+    constructor(win, op, info) {
+        this.window = win;
+        this.sides = RESIZE_SIDES.get(op);
+        this.monitor = info.monitor;
+        this.wsIndex = info.ws;
+        this.grid0 = gridFor(this.monitor, this.wsIndex);
+        this.members = gridMembers(this.monitor, this.wsIndex, this.grid0);
+        this.spans0 = new Map(this.members.map(w => {
+            const i = tracked.get(w);
+            return [w, { l: [...i.l], s: [...i.s] }];
+        }));
+        this.startRect = rectOf(win.get_frame_rect());
+        [this.startX, this.startY] = global.get_pointer();
+        this.applied = new Map(this.members.map(w => [w, rectOf(w.get_frame_rect())]));
+        this.result = null;
+        this.done = false;
+
+        const time = global.display.get_current_time_roundtrip();
+        restarting = true;
+        try {
+            global.display.end_grab_op(time);
+        } finally {
+            restarting = false;
+        }
+
+        this.catcher = new St.Widget({
+            reactive: true, x: 0, y: 0,
+            width: global.stage.width, height: global.stage.height,
+        });
+        Main.uiGroup.add_child(this.catcher);
+        restarting = true;
+        let ok = false;
+        try {
+            ok = Main.pushModal(this.catcher, time);
+        } finally {
+            restarting = false;
+        }
+        if (!ok) {
+            this.catcher.destroy();
+            this.catcher = null;
+            this.done = true;
+            return;
+        }
+        global.display.set_cursor(RESIZE_CURSORS.get(op));
+        this.lines = fullLayer();
+        placeNearWindow(this.lines, win, true);
+
+        this.eventId = global.stage.connect('captured-event', (actor, event) => this._onEvent(event));
+        // Safety net: finish if the button was released without an event.
+        this.timer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, POLL_MS * 2, () => {
+            const [, , mods] = global.get_pointer();
+            if ((mods & Clutter.ModifierType.BUTTON1_MASK) === 0) {
+                this.timer = 0;
+                this.finish(true);
+                return GLib.SOURCE_REMOVE;
+            }
+            return GLib.SOURCE_CONTINUE;
+        });
+        this._update();
+    }
+
+    _onEvent(event) {
+        switch (event.type()) {
+        case Clutter.EventType.MOTION:
+            this._update();
+            return Clutter.EVENT_STOP;
+        case Clutter.EventType.BUTTON_RELEASE:
+            this.finish(true);
+            return Clutter.EVENT_STOP;
+        case Clutter.EventType.KEY_PRESS:
+            if (event.get_key_symbol() === Clutter.KEY_Escape) {
+                this.finish(false);
+                return Clutter.EVENT_STOP;
+            }
+            this._update();
+            return Clutter.EVENT_STOP;
+        case Clutter.EventType.KEY_RELEASE:
+            this._update();
+            return Clutter.EVENT_STOP;
+        default:
+            return Clutter.EVENT_STOP;
+        }
+    }
+
+    _place(win, r) {
+        if (sameRect(this.applied.get(win), r))
+            return;
+        placeWindow(win, r);
+        this.applied.set(win, r);
+    }
+
+    _update() {
+        if (this.done)
+            return;
+        const [px, py, mods] = global.get_pointer();
+        const { ctrl, shift } = keysHeld(mods);
+        const grid = { W: this.grid0.W, long: [...this.grid0.long], short: [...this.grid0.short] };
+        const spans = new Map([...this.spans0].map(([w, sp]) => [w, { l: [...sp.l], s: [...sp.s] }]));
+        const mine = spans.get(this.window);
+        const active = [];
+        let plain = null;
+
+        for (const side of this.sides) {
+            const delta = side === 'left' || side === 'right' ? px - this.startX : py - this.startY;
+            if (ctrl) {
+                const line = sideLine(grid.W, mine, side);
+                if (line === 'outer')
+                    continue;   // Ctrl+drag on an outer edge does nothing
+                const t = grid[line.axis][line.idx] + delta;
+                active.push(moveLine(grid, [...spans.values()], line.axis, line.idx, t, shift));
+            } else {
+                plain = plain || { ...this.startRect };
+                const r = plain;
+                if (side === 'left') {
+                    const right = r.x + r.width;
+                    r.x = Math.min(this.startRect.x + delta, right - 1);
+                    r.width = right - r.x;
+                } else if (side === 'right') {
+                    r.width = Math.max(this.startRect.width + delta, 1);
+                } else if (side === 'top') {
+                    const bottom = r.y + r.height;
+                    r.y = Math.min(this.startRect.y + delta, bottom - 1);
+                    r.height = bottom - r.y;
+                } else {
+                    r.height = Math.max(this.startRect.height + delta, 1);
+                }
+            }
+        }
+
+        if (ctrl) {
+            for (const w of this.members)
+                this._place(w, gridRect(grid, spans.get(w)));
+        } else {
+            // Others go back to where they were; just this window resizes.
+            for (const w of this.members) {
+                if (w !== this.window)
+                    this._place(w, gridRect(this.grid0, this.spans0.get(w)));
+            }
+            this._place(this.window, plain || this.startRect);
+        }
+        this.result = { ctrl, grid, spans };
+
+        this.lines.destroy_all_children();
+        if (ctrl)
+            drawGridLines(this.lines, grid, active);
+    }
+
+    // commit: false (Escape) puts everything back as it was.
+    finish(commit) {
+        if (this.done)
+            return;
+        this.done = true;
+        if (this.timer)
+            GLib.source_remove(this.timer);
+        this.timer = 0;
+        if (this.eventId)
+            global.stage.disconnect(this.eventId);
+        this.eventId = 0;
+        if (this.lines)
+            this.lines.destroy();
+        this.lines = null;
+        global.display.set_cursor(Meta.Cursor.DEFAULT);
+        restarting = true;
+        try {
+            Main.popModal(this.catcher, global.display.get_current_time_roundtrip());
+        } catch (e) {
+            global.logError(`screen-snapper: popModal: ${e}`);
+        } finally {
+            restarting = false;
+        }
+        this.catcher.destroy();
+        this.catcher = null;
+        if (session === this)
+            session = null;
+
+        if (!commit || !this.result) {
+            for (const w of this.members)
+                this._place(w, w === this.window ? this.startRect : gridRect(this.grid0, this.spans0.get(w)));
+            return;
+        }
+        if (this.result.ctrl) {
+            saveGrid(this.monitor, this.wsIndex, this.result.grid);
+            for (const [w, sp] of this.result.spans)
+                track(w, this.monitor, this.wsIndex, sp.l, sp.s);
+        } else {
+            untrack(this.window);   // resized by hand: off the grid now
+        }
+    }
+
+    destroy() {
+        this.finish(true);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Ctrl+Shift view while moving: Muffin's Shift edge snapping keeps the
+// window's size and lines its edges up with monitor, panel and other
+// windows' edges.
 
 // Visible windows on the current workspace other than the dragged one,
 // in stacking order (bottom first).
@@ -308,7 +852,8 @@ function drawEdgeTargets(layer, dragged) {
 }
 
 // ---------------------------------------------------------------------------
-// One drag: grid snapping, its preview, and the Ctrl / Ctrl+Shift overlays.
+// One move drag: grid snapping, its preview, and the Ctrl / Ctrl+Shift
+// overlays.
 
 class DragSession {
     constructor(win, op) {
@@ -338,8 +883,7 @@ class DragSession {
 
     _tick() {
         const [px, py, mods] = global.get_pointer();
-        const ctrl = (mods & Clutter.ModifierType.CONTROL_MASK) !== 0;
-        const shift = (mods & Clutter.ModifierType.SHIFT_MASK) !== 0;
+        const { ctrl, shift } = keysHeld(mods);
 
         const mode = !ctrl ? null : shift ? 'edges' : 'zones';
         if (mode !== this.mode)
@@ -364,30 +908,6 @@ class DragSession {
         }
     }
 
-    // Put an actor just below the dragged window (or on top of everything if
-    // the window's actor isn't in the window group).
-    _placeBelowWindow(actor) {
-        const group = global.window_group;
-        if (actor.get_parent() !== group)
-            group.add_child(actor);
-        const dragged = this.window.get_compositor_private();
-        if (dragged && dragged.get_parent() === group)
-            group.set_child_below_sibling(actor, dragged);
-        else
-            group.set_child_above_sibling(actor, null);
-    }
-
-    _placeAboveWindow(actor) {
-        const group = global.window_group;
-        if (actor.get_parent() !== group)
-            group.add_child(actor);
-        const dragged = this.window.get_compositor_private();
-        if (dragged && dragged.get_parent() === group)
-            group.set_child_above_sibling(actor, dragged);
-        else
-            group.set_child_above_sibling(actor, null);
-    }
-
     _updatePreview() {
         if (this.target) {
             if (!this.preview)
@@ -396,7 +916,7 @@ class DragSession {
             this.preview.set_position(r.x, r.y);
             this.preview.set_size(r.width, r.height);
             this.preview.show();
-            this._placeBelowWindow(this.preview);
+            placeNearWindow(this.preview, this.window, false);
         } else if (this.preview) {
             this.preview.hide();
         }
@@ -419,10 +939,10 @@ class DragSession {
         }
         // The base goes under the dragged window so the window isn't tinted,
         // the preview above the base, and highlights on top of the window.
-        this._placeBelowWindow(this.base);
+        placeNearWindow(this.base, this.window, false);
         if (this.preview)
-            this._placeBelowWindow(this.preview);
-        this._placeAboveWindow(this.front);
+            placeNearWindow(this.preview, this.window, false);
+        placeNearWindow(this.front, this.window, true);
 
         this._updateCurrentZone();
         this._updateLanding();
@@ -461,8 +981,8 @@ class DragSession {
                 : { x: from, y: pos - 1, width: to - from, height: 3 };
             this.front.add_child(box('screen-snapper-guide', r));
         };
-        const check = (edges, vertical, positions, from, to) => {
-            for (const pos of positions) {
+        const check = (edges, vertical, at, from, to) => {
+            for (const pos of at) {
                 for (const e of edges) {
                     if (Math.abs(e.pos - pos) <= ALIGN_TOLERANCE)
                         guide(vertical, e.pos, Math.min(e.from, from), Math.max(e.to, to));
@@ -473,11 +993,13 @@ class DragSession {
         check(this.edges.horizontal, false, [t.y, t.y + t.height], t.x, t.x + t.width);
     }
 
-    // The drag ended normally: snap if the pointer was in a band.
+    // The drag ended normally: snap if the pointer was in a band. A grid
+    // window moved by hand leaves the grid.
     finish() {
         this._tick();
         const target = this.target;
         const win = this.window;
+        const moved = this.moved;
         this.destroy();
         if (target) {
             // Apply once Muffin has finished ending the grab.
@@ -485,6 +1007,8 @@ class DragSession {
                 applyTarget(win, target);
                 return GLib.SOURCE_REMOVE;
             });
+        } else if (moved) {
+            untrack(win);
         }
         return target;
     }
@@ -538,9 +1062,8 @@ class KeepSize {
     }
 
     // Resize to the tiled size, with the pointer on the same spot of the
-    // window it was grabbed at. Muffin ignores the position passed to
-    // move_resize_frame (and any move while a move grab is active), so
-    // resize and move separately with no grab running.
+    // window it was grabbed at. Muffin ignores moves while a move grab is
+    // active, so this runs with no grab running.
     apply() {
         const [px, py] = global.get_pointer();
         const x = Math.round(px - this.fx * this.width);
@@ -618,19 +1141,39 @@ function stopAll() {
 function onGrabBegin(...args) {
     if (restarting)
         return;
-    stopAll();
     const [win, op] = grabArgs(args);
-    if (!win || !isMoveOp(op))
+    if (!win)
         return;
+    stopAll();
 
-    if (isTiled(win))
-        keepSize = new KeepSize(win, op);
-    session = new DragSession(win, op);
+    if (isMoveOp(op)) {
+        if (isTiled(win))
+            keepSize = new KeepSize(win, op);
+        session = new DragSession(win, op);
+        return;
+    }
+
+    if (!tracked.has(win) && RESIZE_SIDES.has(op) && win.get_workspace()) {
+        const monitor = win.get_monitor();
+        const wsIndex = win.get_workspace().index();
+        adoptWindows(monitor, wsIndex, gridFor(monitor, wsIndex));
+    }
+    const info = tracked.get(win);
+    if (!info)
+        return;   // not a grid window: Muffin resizes it as usual
+    if (RESIZE_SIDES.has(op) && isOnGrid(win, info, gridFor(info.monitor, info.ws))) {
+        const s = new ResizeSession(win, op, info);
+        session = s.done ? null : s;
+    } else if (RESIZE_SIDES.has(op) || isKeyboardResizeOp(op)) {
+        untrack(win);   // resized some other way: off the grid
+    }
 }
 
 function onGrabEnd() {
     if (restarting)
         return;
+    if (session instanceof ResizeSession)
+        return;   // finishes itself on button release
     const ks = keepSize;
     const s = session;
     keepSize = session = null;
@@ -646,45 +1189,36 @@ function onGrabEnd() {
 
 function init(metadata) {}
 
-// Remembers, across logins, that we were the ones who turned edge tiling off.
-function markerFile() {
-    return Gio.File.new_for_path(GLib.build_filenamev(
-        [GLib.get_user_config_dir(), 'screen-snapper', 'edge-tiling-was-on']));
-}
-
 function enable() {
-    // Turn off Cinnamon's edge tiling so it doesn't fight the grid.
+    loadGrids();
+
+    // Turn off Cinnamon's edge tiling so it doesn't fight the grid. A marker
+    // file remembers, across logins, that we were the ones who turned it off.
     muffinSettings = new Gio.Settings({ schema_id: MUFFIN_SCHEMA });
-    const marker = markerFile();
     if (muffinSettings.get_boolean('edge-tiling')) {
         muffinSettings.set_boolean('edge-tiling', false);
-        try {
-            marker.get_parent().make_directory_with_parents(null);
-        } catch (e) {
-            // Directory already exists.
-        }
-        try {
-            marker.replace_contents('1', null, false, Gio.FileCreateFlags.NONE, null);
-        } catch (e) {
-            global.logError(`screen-snapper: could not write ${marker.get_path()}: ${e}`);
-        }
+        writeConfig('edge-tiling-was-on', '1');
     }
-    turnedOffEdgeTiling = marker.query_exists(null);
+    turnedOffEdgeTiling = configFile('edge-tiling-was-on').query_exists(null);
+
     beginId = global.display.connect('grab-op-begin', onGrabBegin);
     endId = global.display.connect('grab-op-end', onGrabEnd);
+    Main.keybindingManager.addHotKey(RESET_NAME, RESET_BINDING, resetGrid);
 }
 
 function disable() {
     stopAll();
+    Main.keybindingManager.removeHotKey(RESET_NAME);
     if (beginId)
         global.display.disconnect(beginId);
     if (endId)
         global.display.disconnect(endId);
     beginId = endId = 0;
+    untrackAll();
     if (muffinSettings && turnedOffEdgeTiling) {
         muffinSettings.set_boolean('edge-tiling', true);
         try {
-            markerFile().delete(null);
+            configFile('edge-tiling-was-on').delete(null);
         } catch (e) {
             // Already gone.
         }

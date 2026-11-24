@@ -32,6 +32,31 @@ Together these reach all 30 rectangles the grid allows.
 Cinnamon's own edge tiling is turned off while the extension is enabled and
 turned back on when you disable it. Super+arrow keyboard tiling still works.
 
+## Moving grid lines
+
+Once windows are snapped into the grid, **Ctrl+drag** the edge they share
+and that grid line moves across the whole monitor. Every grid window with an
+edge on it resizes live, and later snaps use the moved line.
+
+- **Ctrl+Shift** while dragging makes the line jump to the even-eighths
+  positions, so it's easy to put back exactly.
+- A line stops 200 px from its neighbours. If the next line is hidden inside
+  a window, the drag carries on smoothly with that line instead, so an edge
+  can pass it. It won't do that if a window would be squeezed to nothing.
+- **Ctrl+drag on an edge at the screen edge** does nothing.
+- **Without Ctrl**, dragging an edge resizes just that window as usual, and
+  it leaves the grid: it won't follow line moves until you Ctrl-snap it again.
+  Moving a grid window by hand also takes it off the grid.
+- The keys are checked the whole drag. Press Ctrl partway through to switch
+  to moving the line; release it and the line goes back to where it was and
+  the drag becomes a plain resize. **Escape** cancels the drag.
+
+Each monitor and each workspace keeps its own grid, saved in
+`~/.config/screen-snapper/grids.json`. **Super+Ctrl+G** puts the grid on the
+monitor under the pointer, on the current workspace, back to even eighths
+and moves its windows to match. Windows sitting exactly on grid cells are
+recognised again after Cinnamon restarts.
+
 ## Shift snapping
 
 Hold **Shift** while dragging to use Cinnamon's edge snapping instead of the
