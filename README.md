@@ -9,18 +9,36 @@ to that zone. When you later drag it back out, Cinnamon normally shrinks it
 back to its size from before it was snapped. With this extension it keeps the
 snapped size, and the cursor stays on the spot of the title bar you grabbed.
 
-**Snap overlay.** Hold **Shift** while dragging a window and Cinnamon snaps the
-window's edges to nearby edges: monitor edges, panel edges and other
-windows' edges. While Shift is held, a transparent overlay shows:
+**Snap overlay.** While dragging a window, hold a key to see where it can snap.
 
-| Color | Meaning |
+Hold **Ctrl** to see the edge-tiling zones, where the window snaps when you
+drag it to an edge or corner:
+
+| Look | Meaning |
 |---|---|
-| Blue outline | Each monitor, and its usable area inside the panels (lightly shaded) |
+| Blue cells | The four quarters of each monitor; two side by side make a half |
+| Amber strips along the edges | Touch one with the pointer to snap to that half |
+| Pink corner squares | Touch one to snap to that quarter |
+| Green fill | The zone the window snaps to if you let go now |
+
+Hold **Ctrl+Shift** to see the targets for Shift's edge snapping. With Shift
+held, the window keeps its current size and its edges jump to line up with
+monitor, panel and other windows' edges:
+
+| Look | Meaning |
+|---|---|
+| Blue outlines | Each monitor, and its usable area inside the panels |
 | Amber outline, shaded | Other windows whose edges you can snap to |
 | Green outline | Where the dragged window will land |
 | Bright green lines | Edges the dragged window is lined up with |
 
-Release Shift and the overlay disappears, and the drag goes back to normal.
+Ctrl doesn't change how the window snaps; it only shows the overlay. Let go of
+Ctrl and the overlay disappears.
+
+Zone sizes are usually half the monitor, but if a window is already tiled to
+one side, the other side's zone fills the space that's left. The quarter
+outlines are estimates in some layouts; the green fill is always exactly
+what Cinnamon will do.
 
 Colors live in `screen-snapper@local/stylesheet.css`.
 

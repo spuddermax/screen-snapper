@@ -6,10 +6,9 @@
 //    snapped (tiled) and restores it when you drag the window back out of the
 //    snap zone. We put the snapped size back as soon as the window unsnaps.
 //
-// 2. Snap overlay. Holding Shift while dragging makes Muffin snap the window's
-//    edges to monitor edges, panel edges and other windows' edges. While Shift
-//    is held during a drag we draw a transparent overlay showing every one of
-//    those snap targets, plus where the dragged window will land.
+// 2. Snap overlay. Hold Ctrl while dragging to see every edge-tiling zone and
+//    the edge strips that trigger them. Add Shift (Ctrl+Shift) to see the
+//    edge-snapping targets Shift uses instead.
 
 const Meta = imports.gi.Meta;
 const GLib = imports.gi.GLib;
@@ -19,8 +18,12 @@ const Main = imports.ui.main;
 
 // How close (px) two edges must be to count as lined up.
 const ALIGN_TOLERANCE = 1;
-// How often (ms) to check whether Shift is held during a drag.
-const SHIFT_POLL_MS = 30;
+// How often (ms) to check whether Ctrl/Shift are held during a drag.
+const KEY_POLL_MS = 30;
+// How close (px) the pointer must get to a work-area edge to trigger tiling,
+// measured from Muffin. The top edge only triggers at the very top.
+const TRIGGER_PX = 8;
+const TOP_TRIGGER_PX = 2;
 
 let beginId = 0;
 let endId = 0;
@@ -149,15 +152,37 @@ class KeepSize {
 
 // ---------------------------------------------------------------------------
 // Snap overlay
+//
+// Ctrl held during a drag: show the edge-tiling zones (halves and quarters of
+// each monitor), the strips along each edge that trigger them, and the zone
+// the window will snap to right now.
+//
+// Ctrl+Shift held: Shift makes Muffin snap the window's edges (at its current
+// size) to monitor, panel and other windows' edges, so show those targets
+// instead, plus where the window will land and which edges it lines up with.
 
 function rectOf(r) {
     return { x: r.x, y: r.y, width: r.width, height: r.height };
 }
 
-// Windows Muffin snaps to: visible windows on the current workspace other
-// than the one being dragged, in stacking order (bottom first).
-function snapWindows(dragged) {
-    const ws = global.workspace_manager.get_active_workspace();
+function box(styleClass, r) {
+    return new St.Widget({
+        style_class: styleClass,
+        reactive: false,
+        x: Math.round(r.x), y: Math.round(r.y),
+        width: Math.max(Math.round(r.width), 1),
+        height: Math.max(Math.round(r.height), 1),
+    });
+}
+
+function activeWorkspace() {
+    return global.workspace_manager.get_active_workspace();
+}
+
+// Visible windows on the current workspace other than the dragged one,
+// in stacking order (bottom first).
+function otherWindows(dragged) {
+    const ws = activeWorkspace();
     const skip = [Meta.WindowType.DESKTOP, Meta.WindowType.DOCK];
     return global.get_window_actors()
         .map(a => a.meta_window)
@@ -168,142 +193,242 @@ function snapWindows(dragged) {
             !skip.includes(w.get_window_type()));
 }
 
-function snapAreas(dragged) {
-    const ws = global.workspace_manager.get_active_workspace();
-    const monitors = [];
+function monitorAreas() {
+    const ws = activeWorkspace();
+    const out = [];
     const n = global.display.get_n_monitors();
     for (let i = 0; i < n; i++) {
-        monitors.push({
+        out.push({
+            index: i,
             monitor: rectOf(global.display.get_monitor_geometry(i)),
             work: rectOf(ws.get_work_area_for_monitor(i)),
         });
     }
-    const windows = snapWindows(dragged).map(w => rectOf(w.get_frame_rect()));
-    return { monitors, windows };
+    return out;
 }
 
-// Every edge the dragged window can snap to, as vertical (x) and
-// horizontal (y) line segments.
-function snapEdges(areas) {
+// Width of the left and right tiling columns on a monitor. Each is half the
+// work area, unless a window is already tiled to the other side; then it
+// fills the space that window leaves. (Measured from Muffin; for quarters it
+// is not always applied, so those outlines can be slightly off. The
+// active-zone highlight always comes straight from Muffin.)
+function columnWidths(m, dragged) {
+    const W = m.work;
+    let left = W.width / 2;
+    let right = W.width / 2;
+    const M = Meta.TileMode;
+    for (const w of otherWindows(dragged)) {
+        if (w.get_monitor() !== m.index)
+            continue;
+        const r = w.get_frame_rect();
+        if (w.tile_mode === M.LEFT)
+            right = W.x + W.width - (r.x + r.width);
+        else if (w.tile_mode === M.RIGHT)
+            left = r.x - W.x;
+    }
+    return [left, right];
+}
+
+// --- Ctrl: edge-tiling zones ---
+
+function drawTileZones(layer, dragged) {
+    for (const m of monitorAreas()) {
+        const W = m.work;
+        const [leftW, rightW] = columnWidths(m, dragged);
+        const x2 = W.x + W.width;
+        const y2 = W.y + W.height;
+        const sy = W.y + W.height / 2;
+        const rx = x2 - rightW;
+
+        layer.add_child(box('screen-snapper-workarea', W));
+
+        // Four quarter cells; pairs of them make up the halves.
+        const cells = [
+            { x: W.x, y: W.y, width: leftW, height: sy - W.y },
+            { x: rx, y: W.y, width: rightW, height: sy - W.y },
+            { x: W.x, y: sy, width: leftW, height: y2 - sy },
+            { x: rx, y: sy, width: rightW, height: y2 - sy },
+        ];
+        for (const c of cells)
+            layer.add_child(box('screen-snapper-zone', c));
+
+        // Strips the pointer has to touch to trigger each zone.
+        const t = TRIGGER_PX;
+        const top = TOP_TRIGGER_PX;
+        const strips = [
+            { x: W.x, y: W.y, width: t, height: W.height },           // left half
+            { x: x2 - t, y: W.y, width: t, height: W.height },        // right half
+            { x: W.x, y: W.y, width: W.width, height: top },          // top
+            { x: W.x, y: y2 - t, width: W.width, height: t },         // bottom half
+        ];
+        for (const s of strips)
+            layer.add_child(box('screen-snapper-trigger', s));
+
+        const corners = [
+            { x: W.x, y: W.y, width: t, height: t },
+            { x: x2 - t, y: W.y, width: t, height: t },
+            { x: W.x, y: y2 - t, width: t, height: t },
+            { x: x2 - t, y: y2 - t, width: t, height: t },
+        ];
+        for (const c of corners)
+            layer.add_child(box('screen-snapper-corner', c));
+    }
+}
+
+// --- Ctrl+Shift: edge snapping at the window's current size ---
+
+function snapRects(dragged) {
+    const rects = [];
+    for (const m of monitorAreas()) {
+        rects.push(m.monitor);
+        rects.push(m.work);
+    }
+    for (const w of otherWindows(dragged))
+        rects.push(rectOf(w.get_frame_rect()));
+    return rects;
+}
+
+function snapEdges(rects) {
     const vertical = [];
     const horizontal = [];
-    const add = r => {
+    for (const r of rects) {
         vertical.push({ pos: r.x, from: r.y, to: r.y + r.height });
         vertical.push({ pos: r.x + r.width, from: r.y, to: r.y + r.height });
         horizontal.push({ pos: r.y, from: r.x, to: r.x + r.width });
         horizontal.push({ pos: r.y + r.height, from: r.x, to: r.x + r.width });
-    };
-    for (const m of areas.monitors) {
-        add(m.monitor);
-        add(m.work);
     }
-    areas.windows.forEach(add);
     return { vertical, horizontal };
 }
 
-function box(styleClass, r) {
-    return new St.Widget({
-        style_class: styleClass,
-        reactive: false,
-        x: r.x, y: r.y,
-        width: Math.max(r.width, 1),
-        height: Math.max(r.height, 1),
-    });
+function drawEdgeTargets(layer, dragged) {
+    for (const m of monitorAreas()) {
+        layer.add_child(box('screen-snapper-monitor', m.monitor));
+        layer.add_child(box('screen-snapper-workarea', m.work));
+    }
+    for (const w of otherWindows(dragged))
+        layer.add_child(box('screen-snapper-window', rectOf(w.get_frame_rect())));
 }
 
 class SnapOverlay {
     constructor(win) {
         this.window = win;
-        this.actor = null;        // zones, below the dragged window
-        this.targetLayer = null;  // landing outline + guides, above it
+        this.mode = null;         // null, 'zones' or 'edges'
+        this.base = null;         // drawn below the dragged window
+        this.active = null;       // part of base: current tile zone
+        this.front = null;        // drawn above the dragged window
         this.edges = null;
-        this.posId = win.connect('position-changed', () => this._updateTarget());
-        this.sizeId = win.connect('size-changed', () => this._updateTarget());
-        this.timer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, SHIFT_POLL_MS, () => {
-            this._checkShift();
+        this.tilePreview = null;  // zone Muffin will snap to, if any
+
+        const wm = global.window_manager;
+        this.signals = [
+            [win, win.connect('position-changed', () => this._updateFront())],
+            [win, win.connect('size-changed', () => this._updateFront())],
+            [wm, wm.connect('show-tile-preview', (wm_, w, rect) => {
+                this.tilePreview = rectOf(rect);
+                this._updateFront();
+            })],
+            [wm, wm.connect('hide-tile-preview', () => {
+                this.tilePreview = null;
+                this._updateFront();
+            })],
+        ];
+        this.timer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, KEY_POLL_MS, () => {
+            this._checkKeys();
             return GLib.SOURCE_CONTINUE;
         });
-        this._checkShift();
+        this._checkKeys();
     }
 
-    _checkShift() {
+    _checkKeys() {
         const [, , mods] = global.get_pointer();
+        const ctrl = (mods & Clutter.ModifierType.CONTROL_MASK) !== 0;
         const shift = (mods & Clutter.ModifierType.SHIFT_MASK) !== 0;
-        if (shift && !this.actor)
-            this._show();
-        else if (!shift && this.actor)
-            this._hide();
+        const mode = !ctrl ? null : shift ? 'edges' : 'zones';
+        if (mode !== this.mode)
+            this._show(mode);
     }
 
-    _show() {
-        const areas = snapAreas(this.window);
-        this.edges = snapEdges(areas);
-
-        this.actor = new St.Widget({
-            style_class: 'screen-snapper-overlay',
+    _fullLayer() {
+        return new St.Widget({
             reactive: false,
             x: 0, y: 0,
             width: global.stage.width,
             height: global.stage.height,
         });
+    }
 
-        for (const m of areas.monitors) {
-            this.actor.add_child(box('screen-snapper-monitor', m.monitor));
-            this.actor.add_child(box('screen-snapper-workarea', m.work));
+    _show(mode) {
+        this._hide();
+        this.mode = mode;
+        if (!mode)
+            return;
+
+        this.base = this._fullLayer();
+        this.front = this._fullLayer();
+        if (mode === 'zones') {
+            drawTileZones(this.base, this.window);
+            this.active = this._fullLayer();
+            this.base.add_child(this.active);
+        } else {
+            drawEdgeTargets(this.base, this.window);
+            this.edges = snapEdges(snapRects(this.window));
         }
-        for (const r of areas.windows)
-            this.actor.add_child(box('screen-snapper-window', r));
-
-        this.targetLayer = new St.Widget({
-            reactive: false,
-            x: 0, y: 0,
-            width: global.stage.width,
-            height: global.stage.height,
-        });
 
         // Zones go above every other window but below the dragged one, so the
-        // dragged window isn't tinted. Its landing outline and guides go on top.
+        // dragged window isn't tinted. Highlights go on top of it.
         const group = global.window_group;
-        group.add_child(this.actor);
-        group.add_child(this.targetLayer);
+        group.add_child(this.base);
+        group.add_child(this.front);
         const dragged = this.window.get_compositor_private();
         if (dragged && dragged.get_parent() === group) {
-            group.set_child_below_sibling(this.actor, dragged);
-            group.set_child_above_sibling(this.targetLayer, dragged);
+            group.set_child_below_sibling(this.base, dragged);
+            group.set_child_above_sibling(this.front, dragged);
         } else {
-            group.set_child_above_sibling(this.actor, null);
-            group.set_child_above_sibling(this.targetLayer, this.actor);
+            group.set_child_above_sibling(this.base, null);
+            group.set_child_above_sibling(this.front, this.base);
         }
 
-        this._updateTarget();
+        this._updateFront();
     }
 
     _hide() {
-        if (this.targetLayer)
-            this.targetLayer.destroy();
-        if (this.actor)
-            this.actor.destroy();
-        this.actor = null;
-        this.targetLayer = null;
-        this.edges = null;
+        if (this.front)
+            this.front.destroy();
+        if (this.base)
+            this.base.destroy();
+        this.front = this.base = this.active = this.edges = null;
+        this.mode = null;
     }
 
-    // Highlight where the dragged window is, and the snap edges it lines up with.
-    _updateTarget() {
-        if (!this.targetLayer)
+    _updateFront() {
+        if (!this.front)
             return;
-        this.targetLayer.destroy_all_children();
+        this.front.destroy_all_children();
+        if (this.active)
+            this.active.destroy_all_children();
+        if (this.mode === 'zones')
+            this._drawActiveZone();
+        else
+            this._drawLanding();
+    }
 
+    // The zone the window will snap to if dropped now, as Muffin reports it.
+    _drawActiveZone() {
+        if (this.tilePreview)
+            this.active.add_child(box('screen-snapper-active', this.tilePreview));
+    }
+
+    // Where the window sits, and the snap edges it lines up with.
+    _drawLanding() {
         const t = rectOf(this.window.get_frame_rect());
-        this.targetLayer.add_child(box('screen-snapper-target', t));
+        this.front.add_child(box('screen-snapper-target', t));
 
         const guide = (vertical, pos, from, to) => {
             const r = vertical
                 ? { x: pos - 1, y: from, width: 3, height: to - from }
                 : { x: from, y: pos - 1, width: to - from, height: 3 };
-            this.targetLayer.add_child(box('screen-snapper-guide', r));
+            this.front.add_child(box('screen-snapper-guide', r));
         };
-
         const check = (edges, vertical, positions, from, to) => {
             for (const pos of positions) {
                 for (const e of edges) {
@@ -320,11 +445,9 @@ class SnapOverlay {
         if (this.timer)
             GLib.source_remove(this.timer);
         this.timer = 0;
-        if (this.posId)
-            this.window.disconnect(this.posId);
-        if (this.sizeId)
-            this.window.disconnect(this.sizeId);
-        this.posId = this.sizeId = 0;
+        for (const [obj, id] of this.signals)
+            obj.disconnect(id);
+        this.signals = [];
         this._hide();
     }
 }

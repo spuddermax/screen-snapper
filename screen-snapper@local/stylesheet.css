@@ -1,15 +1,43 @@
-/* Overlay shown while Shift+dragging a window. Tweak colors here, then
-   reload the extension (or restart Cinnamon) to see the change. */
+/* Overlay shown while dragging a window with Ctrl (or Ctrl+Shift) held.
+   Tweak colors here, then run ./install.sh to reload. */
 
-/* Whole monitor. */
-.screen-snapper-monitor {
-    border: 2px solid rgba(120, 170, 255, 0.55);
-}
+/* ---- Shared ---- */
 
 /* Usable part of a monitor (inside the panels). */
 .screen-snapper-workarea {
     border: 2px solid rgba(120, 170, 255, 0.9);
-    background-color: rgba(120, 170, 255, 0.08);
+}
+
+/* ---- Ctrl: edge-tiling zones ---- */
+
+/* A quarter of a monitor. Two side by side make a half. */
+.screen-snapper-zone {
+    border: 1px solid rgba(120, 170, 255, 0.8);
+    background-color: rgba(120, 170, 255, 0.10);
+}
+
+/* Edge strip: touch it with the pointer to snap to that half. */
+.screen-snapper-trigger {
+    background-color: rgba(255, 200, 80, 0.85);
+}
+
+/* Corner: touch it to snap to that quarter. */
+.screen-snapper-corner {
+    background-color: rgba(255, 90, 200, 1);
+}
+
+/* The zone the window snaps to if you let go now. */
+.screen-snapper-active {
+    border: 3px solid rgba(80, 220, 120, 1);
+    background-color: rgba(80, 220, 120, 0.25);
+}
+
+/* ---- Ctrl+Shift: edge snapping at the window's current size ---- */
+
+/* Whole monitor. */
+.screen-snapper-monitor {
+    border: 2px solid rgba(120, 170, 255, 0.55);
+    background-color: rgba(120, 170, 255, 0.06);
 }
 
 /* Another window whose edges the dragged window can snap to. */
@@ -19,7 +47,7 @@
     border-radius: 3px;
 }
 
-/* Where the dragged window currently sits (drawn on top of it). */
+/* Where the dragged window will land (drawn on top of it). */
 .screen-snapper-target {
     border: 3px solid rgba(80, 220, 120, 1);
 }
