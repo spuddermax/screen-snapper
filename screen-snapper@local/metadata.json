@@ -1,0 +1,12 @@
+{
+    "uuid": "screen-snapper@local",
+    "name": "Screen Snapper",
+    "description": "Keeps a snapped window's size when you drag it out of its snap zone, and shows an overlay of every edge-snap target while you Shift+drag.",
+    "cinnamon-version": [
+        "6.0",
+        "6.2",
+        "6.4",
+        "6.6"
+    ],
+    "url": "file:///home/matthew/.local/share/cinnamon/extensions/screen-snapper@local"
+}

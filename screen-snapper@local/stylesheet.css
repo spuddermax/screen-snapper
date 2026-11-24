@@ -1,0 +1,30 @@
+/* Overlay shown while Shift+dragging a window. Tweak colors here, then
+   reload the extension (or restart Cinnamon) to see the change. */
+
+/* Whole monitor. */
+.screen-snapper-monitor {
+    border: 2px solid rgba(120, 170, 255, 0.55);
+}
+
+/* Usable part of a monitor (inside the panels). */
+.screen-snapper-workarea {
+    border: 2px solid rgba(120, 170, 255, 0.9);
+    background-color: rgba(120, 170, 255, 0.08);
+}
+
+/* Another window whose edges the dragged window can snap to. */
+.screen-snapper-window {
+    border: 2px solid rgba(255, 200, 80, 0.9);
+    background-color: rgba(255, 200, 80, 0.14);
+    border-radius: 3px;
+}
+
+/* Where the dragged window currently sits (drawn on top of it). */
+.screen-snapper-target {
+    border: 3px solid rgba(80, 220, 120, 1);
+}
+
+/* An edge the dragged window is lined up with. */
+.screen-snapper-guide {
+    background-color: rgba(80, 220, 120, 1);
+}
