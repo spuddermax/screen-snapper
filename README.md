@@ -56,6 +56,8 @@ Each monitor and each workspace keeps its own grid, saved in
 monitor under the pointer, on the current workspace, back to even eighths
 and moves its windows to match. Windows sitting exactly on grid cells are
 recognised again after Cinnamon restarts.
+Grids belong to a workspace's position, so removing a workspace in the
+middle shifts the later workspaces' grids down by one.
 
 ## Shift snapping
 
@@ -69,16 +71,39 @@ Windows tiled with Super+arrows normally shrink back to their old size when
 you drag them out of the tile. This extension keeps the tiled size, and the
 pointer stays where you grabbed the title bar.
 
+## Requirements
+
+- Cinnamon 6.0 to 6.6 on X11 (tested on Linux Mint with Cinnamon 6.6)
+- `python3` and `gsettings` for the install script
+
 ## Install
 
 ```sh
+git clone https://github.com/spuddermax/screen-snapper.git
+cd screen-snapper
 ./install.sh
 ```
 
-This symlinks `screen-snapper@local` into `~/.local/share/cinnamon/extensions/`
-and enables it. Run it again after editing to reload the extension.
+This symlinks `screen-snapper@spuddermax` into
+`~/.local/share/cinnamon/extensions/` and enables it, so keep the clone where
+it is. Run `./install.sh` again after pulling or editing to reload the
+extension.
 
-Colors live in `screen-snapper@local/stylesheet.css`. The band depth is
-`BAND` at the top of `screen-snapper@local/extension.js`.
+Colors live in `screen-snapper@spuddermax/stylesheet.css`. The band depth
+(`BAND`) and minimum cell size (`MIN_CELL`) are at the top of
+`screen-snapper@spuddermax/extension.js`.
 
-To turn it off, use System Settings → Extensions.
+## Uninstall
+
+Turn it off in System Settings → Extensions (this turns Cinnamon's edge
+tiling back on if the extension turned it off), then remove the link and the
+saved grids:
+
+```sh
+rm ~/.local/share/cinnamon/extensions/screen-snapper@spuddermax
+rm -r ~/.config/screen-snapper
+```
+
+## License
+
+[MIT](LICENSE)

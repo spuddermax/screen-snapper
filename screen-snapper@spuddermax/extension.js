@@ -52,6 +52,11 @@ const POLL_MS = 20;
 // Shortest gap (ms) between window updates while dragging an edge.
 const FRAME_MS = 16;
 
+// The px sizes above are at 100% UI scale; this scales them for HiDPI.
+function scaled(v) {
+    return Math.round(v * (global.ui_scale || 1));
+}
+
 const DEFAULT_FRACTIONS = { long: [0.25, 0.5, 0.75], short: [0.5] };
 const RESET_BINDING = '<Super><Control>g';
 const RESET_NAME = 'screen-snapper-reset-grid';
@@ -64,6 +69,7 @@ let endId = 0;
 let restarting = false;
 let keepSize = null;   // KeepSize for the current drag, if any
 let session = null;    // DragSession or ResizeSession for the current drag
+let pendingSnap = 0;   // idle source applying a grid snap after a drop
 let muffinSettings = null;
 let turnedOffEdgeTiling = false;
 
@@ -280,14 +286,15 @@ function positions(grid, axis) {
 
 // Bands and cells along one axis, given its line positions p.
 function regions(p) {
+    const BAND_PX = scaled(BAND);
     const n = p.length - 1;
-    const out = [{ kind: 'edge', i: 0, a: 0, b: BAND }];
+    const out = [{ kind: 'edge', i: 0, a: 0, b: BAND_PX }];
     for (let k = 1; k <= n; k++) {
-        out.push({ kind: 'cell', i: k, a: p[k - 1] + BAND, b: p[k] - BAND });
+        out.push({ kind: 'cell', i: k, a: p[k - 1] + BAND_PX, b: p[k] - BAND_PX });
         if (k < n)
-            out.push({ kind: 'line', i: k, a: p[k] - BAND, b: p[k] + BAND });
+            out.push({ kind: 'line', i: k, a: p[k] - BAND_PX, b: p[k] + BAND_PX });
     }
-    out.push({ kind: 'edge', i: n, a: p[n] - BAND, b: p[n] });
+    out.push({ kind: 'edge', i: n, a: p[n] - BAND_PX, b: p[n] });
     return out;
 }
 
@@ -451,8 +458,8 @@ function isOnGrid(win, info, grid) {
         return false;
     const want = gridRect(grid, info);
     const r = win.get_frame_rect();
-    return Math.abs(r.x - want.x) <= POS_TOLERANCE && Math.abs(r.y - want.y) <= POS_TOLERANCE &&
-        Math.abs(r.width - want.width) <= SIZE_TOLERANCE && Math.abs(r.height - want.height) <= SIZE_TOLERANCE;
+    return Math.abs(r.x - want.x) <= scaled(POS_TOLERANCE) && Math.abs(r.y - want.y) <= scaled(POS_TOLERANCE) &&
+        Math.abs(r.width - want.width) <= scaled(SIZE_TOLERANCE) && Math.abs(r.height - want.height) <= scaled(SIZE_TOLERANCE);
 }
 
 // Every span pair a window can cover.
@@ -538,8 +545,8 @@ function sideLine(W, spans, side) {
 // snaps to the nearest even position in reach.
 function setLine(grid, axis, idx, t, shift) {
     const p = positions(grid, axis);
-    const lo = p[idx] + MIN_CELL;
-    const hi = p[idx + 2] - MIN_CELL;
+    const lo = p[idx] + scaled(MIN_CELL);
+    const hi = p[idx + 2] - scaled(MIN_CELL);
     if (shift) {
         const even = evenLines(grid.W, axis).filter(x => x >= lo && x <= hi);
         if (even.length)
@@ -571,23 +578,33 @@ function handoff(spansList, key, a, j) {
 // to another line, the drag hands off to that line instead of stopping: every
 // window edge on the line being dragged moves onto the next line, which takes
 // over at exactly t, and the dragged line goes back to its starting place
-// (inside a window now). The edge you see never jumps. It doesn't hand off if
-// that would squeeze a window to nothing; then the limit holds.
-// Returns the line that ended up moving.
+// (inside a window now), pushed ahead of t if it is in the way. The edge you
+// see never jumps. It doesn't hand off if that would squeeze a window to
+// nothing; then the limit holds. Returns the line that ended up moving.
 function moveLine(grid, spansList, axis, idx, t, shift) {
     const key = axis === 'long' ? 'l' : 's';
     const n = axis === 'long' ? 4 : 2;
+    const minCell = scaled(MIN_CELL);
     const pos = i => positions(grid, axis)[i];
     let a = idx + 1;   // line number; 0 and n are the screen edges
-    for (;;) {
-        const dir = t < pos(a) ? -1 : t > pos(a) ? 1 : 0;
+    // The direction is fixed for the whole drag update: handing off always
+    // moves away from the starting line, so this can't bounce back and forth.
+    const dir = Math.sign(t - pos(a));
+    for (let step = 0; dir && step < n; step++) {
         const j = a + dir;
-        if (!dir || j < 1 || j > n - 1)
+        if (j < 1 || j > n - 1)
             break;
-        const reached = dir < 0 ? t <= pos(j) + MIN_CELL : t >= pos(j) - MIN_CELL;
+        const reached = dir < 0 ? t <= pos(j) + minCell : t >= pos(j) - minCell;
         if (!reached || !canHandoff(spansList, key, a, j))
             break;
         handoff(spansList, key, a, j);
+        // No window edge is on line a any more. Keep it at least a cell
+        // away from t so line j can follow the pointer, within its own
+        // limit on the far side.
+        const far = pos(a - dir);
+        grid[axis][a - 1] = dir < 0
+            ? Math.min(Math.max(pos(a), t + minCell), far - minCell)
+            : Math.max(Math.min(pos(a), t - minCell), far + minCell);
         a = j;
     }
     setLine(grid, axis, a - 1, t, shift);
@@ -644,6 +661,9 @@ class ResizeSession {
         }
         global.display.set_cursor(RESIZE_CURSORS.get(op));
         this.pending = 0;
+        // A window closing mid-drag leaves the drag; closing the one being
+        // dragged cancels it.
+        this.closeIds = this.members.map(w => [w, w.connect('unmanaged', () => this._dropWindow(w))]);
 
         this.eventId = global.stage.connect('captured-event', (actor, event) => this._onEvent(event));
         // Safety net: finish if the button was released without an event.
@@ -656,7 +676,33 @@ class ResizeSession {
             }
             return GLib.SOURCE_CONTINUE;
         });
-        this._update();
+        this._safeUpdate();
+    }
+
+    _dropWindow(win) {
+        for (const [w, id] of this.closeIds) {
+            if (w === win)
+                w.disconnect(id);
+        }
+        this.closeIds = this.closeIds.filter(([w]) => w !== win);
+        this.members = this.members.filter(w => w !== win);
+        this.spans0.delete(win);
+        this.applied.delete(win);
+        if (win === this.window)
+            this.finish(false);
+    }
+
+    // An error mid-drag must never leave the modal grab (and so all input)
+    // stuck: cancel the drag instead.
+    _safeUpdate(pointer) {
+        try {
+            this._update(pointer);
+            return true;
+        } catch (e) {
+            global.logError(`screen-snapper: edge drag: ${e}\n${e.stack}`);
+            this.finish(false);
+            return false;
+        }
     }
 
     _onEvent(event) {
@@ -700,7 +746,7 @@ class ResizeSession {
             return;
         this.pending = GLib.timeout_add(GLib.PRIORITY_HIGH, FRAME_MS, () => {
             this.pending = 0;
-            this._update();
+            this._safeUpdate();
             return GLib.SOURCE_REMOVE;
         });
     }
@@ -714,6 +760,8 @@ class ResizeSession {
         const grid = { W: this.grid0.W, long: [...this.grid0.long], short: [...this.grid0.short] };
         const spans = new Map([...this.spans0].map(([w, sp]) => [w, { l: [...sp.l], s: [...sp.s] }]));
         const mine = spans.get(this.window);
+        if (!mine)
+            return;
         let plain = null;
 
         for (const side of this.sides) {
@@ -768,26 +816,16 @@ class ResizeSession {
         this.pending = 0;
         // Apply the final pointer position, which a pending update may not
         // have reached yet.
-        if (commit && pointer)
-            this._update(pointer);
-        this.done = true;
-        if (this.timer)
-            GLib.source_remove(this.timer);
-        this.timer = 0;
-        if (this.eventId)
-            global.stage.disconnect(this.eventId);
-        this.eventId = 0;
-        global.display.set_cursor(Meta.Cursor.DEFAULT);
-        restarting = true;
-        try {
-            Main.popModal(this.catcher, global.display.get_current_time_roundtrip());
-        } catch (e) {
-            global.logError(`screen-snapper: popModal: ${e}`);
-        } finally {
-            restarting = false;
+        if (commit && pointer) {
+            try {
+                this._update(pointer);
+            } catch (e) {
+                global.logError(`screen-snapper: edge drag: ${e}`);
+                commit = false;
+            }
         }
-        this.catcher.destroy();
-        this.catcher = null;
+        this.done = true;
+        this._teardown();
         if (session === this)
             session = null;
 
@@ -802,6 +840,48 @@ class ResizeSession {
                 track(w, this.monitor, this.wsIndex, sp.l, sp.s);
         } else {
             untrack(this.window);   // resized by hand: off the grid now
+        }
+    }
+
+    // Release the modal grab and everything else the drag holds. Each step
+    // is separate so one failing can't keep the grab.
+    _teardown() {
+        const steps = [
+            () => {
+                if (this.timer)
+                    GLib.source_remove(this.timer);
+                this.timer = 0;
+            },
+            () => {
+                if (this.eventId)
+                    global.stage.disconnect(this.eventId);
+                this.eventId = 0;
+            },
+            () => {
+                for (const [w, id] of this.closeIds)
+                    w.disconnect(id);
+                this.closeIds = [];
+            },
+            () => global.display.set_cursor(Meta.Cursor.DEFAULT),
+            () => {
+                restarting = true;
+                try {
+                    Main.popModal(this.catcher, global.display.get_current_time_roundtrip());
+                } finally {
+                    restarting = false;
+                }
+            },
+            () => {
+                this.catcher.destroy();
+                this.catcher = null;
+            },
+        ];
+        for (const step of steps) {
+            try {
+                step();
+            } catch (e) {
+                global.logError(`screen-snapper: ending edge drag: ${e}`);
+            }
         }
     }
 
@@ -908,7 +988,7 @@ class DragSession {
             this._setMode(mode);
 
         if (!this.moved &&
-            Math.hypot(px - this.startX, py - this.startY) >= DRAG_THRESHOLD)
+            Math.hypot(px - this.startX, py - this.startY) >= scaled(DRAG_THRESHOLD))
             this.moved = true;
 
         // Grid snapping only happens during a real drag with Ctrl held (and
@@ -1021,7 +1101,10 @@ class DragSession {
         this.destroy();
         if (target) {
             // Apply once Muffin has finished ending the grab.
-            GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+            if (pendingSnap)
+                GLib.source_remove(pendingSnap);
+            pendingSnap = GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+                pendingSnap = 0;
                 applyTarget(win, target);
                 return GLib.SOURCE_REMOVE;
             });
@@ -1213,11 +1296,14 @@ function enable() {
     // Turn off Cinnamon's edge tiling so it doesn't fight the grid. A marker
     // file remembers, across logins, that we were the ones who turned it off.
     muffinSettings = new Gio.Settings({ schema_id: MUFFIN_SCHEMA });
+    // If the file can't be written, still remember for this login.
+    let turnedOff = false;
     if (muffinSettings.get_boolean('edge-tiling')) {
         muffinSettings.set_boolean('edge-tiling', false);
         writeConfig('edge-tiling-was-on', '1');
+        turnedOff = true;
     }
-    turnedOffEdgeTiling = configFile('edge-tiling-was-on').query_exists(null);
+    turnedOffEdgeTiling = turnedOff || configFile('edge-tiling-was-on').query_exists(null);
 
     beginId = global.display.connect('grab-op-begin', onGrabBegin);
     endId = global.display.connect('grab-op-end', onGrabEnd);
@@ -1226,6 +1312,9 @@ function enable() {
 
 function disable() {
     stopAll();
+    if (pendingSnap)
+        GLib.source_remove(pendingSnap);
+    pendingSnap = 0;
     Main.keybindingManager.removeHotKey(RESET_NAME);
     if (beginId)
         global.display.disconnect(beginId);
