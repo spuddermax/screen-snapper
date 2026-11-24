@@ -3,11 +3,11 @@
 A Cinnamon extension (tested on Cinnamon 6.6, X11) that replaces Cinnamon's
 edge tiling with an eighths snapping grid.
 
-**[Try the live demo](https://spuddermax.github.io/screen-snapper/demo.html)**
+**[Try the live demo](https://spuddermax.github.io/screen-snapper/)**
 in your browser first: an interactive model of the grid. Drag window edges
 with Ctrl and Shift, switch monitors and workspaces, and hover any drop band
 to see the window it gives. The screenshots below come from it (source:
-[`docs/demo.html`](docs/demo.html)).
+[`docs/index.html`](docs/index.html)).
 
 ## Snapping grid
 
