@@ -1,0 +1,1013 @@
+<title>Eighths Snap Grid</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600&display=swap">
+<style>
+/* Layout: the movable-grid test bench first, then the drop zone map (which follows the moved lines), rules, the 30-window catalogue, and how it all behaves. */
+:root {
+  --bg: #f4f6f8;
+  --panel: #ffffff;
+  --fg: #18212c;
+  --muted: #5a6776;
+  --line: #c9d1da;
+  --grid: #39485a;
+  --free: #e6eaef;
+  --win: #ffffff;
+  --win-bar: #dde4ec;
+  --touch: #3d7be0;
+  --corner: #8a5cd6;
+  --edge: #12998a;
+  --strip: #6b8f1a;
+  --max: #d0457a;
+  --result: #e8741c;
+  --blocked: #c23a3a;
+  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11161d; --panel: #18202a; --fg: #e3e9f0; --muted: #96a3b3; --line: #2c3845;
+    --grid: #aab8c8; --free: #1d2631; --win: #243040; --win-bar: #2f3d50; --touch: #5b95f2; --corner: #a984ec;
+    --edge: #2bbcaa; --strip: #95bb3a; --max: #ee6b9b; --result: #ff9640; --blocked: #f06464; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11161d; --panel: #18202a; --fg: #e3e9f0; --muted: #96a3b3; --line: #2c3845;
+  --grid: #aab8c8; --free: #1d2631; --win: #243040; --win-bar: #2f3d50; --touch: #5b95f2; --corner: #a984ec;
+  --edge: #2bbcaa; --strip: #95bb3a; --max: #ee6b9b; --result: #ff9640; --blocked: #f06464; color-scheme: dark;
+}
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 56px;
+}
+.wrap { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 44px; }
+h1, h2 { font-family: var(--font-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: 0.01em; }
+h1 { font-size: 2rem; line-height: 1.15; }
+h2 { font-size: 1.35rem; }
+p { margin: 0; max-width: 72ch; }
+.lede { color: var(--muted); margin-top: 8px; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+section { display: flex; flex-direction: column; gap: 14px; }
+header { display: flex; flex-direction: column; gap: 14px; }
+
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--panel); }
+.seg button {
+  font: 500 14px var(--font-body); color: var(--fg); background: transparent; border: 0;
+  padding: 8px 14px; cursor: pointer;
+}
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+.btn {
+  font: 500 14px var(--font-body); color: var(--fg); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 8px; padding: 8px 14px; cursor: pointer;
+}
+.btn:disabled { opacity: .45; cursor: default; }
+.key {
+  font: 500 13px var(--font-mono); color: var(--fg); background: var(--panel); border: 1px solid var(--line);
+  border-bottom-width: 3px; border-radius: 7px; padding: 5px 12px; cursor: pointer; min-width: 64px;
+}
+.key[aria-pressed="true"], .key.held { background: var(--result); border-color: var(--result); color: #fff; }
+.seg button:focus-visible, .btn:focus-visible, .key:focus-visible, .zone:focus-visible, .mini:focus-visible, .grip:focus-visible { outline: 3px solid var(--result); outline-offset: 2px; }
+.monitor-note, .hint { color: var(--muted); font-size: 13px; }
+
+.work { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+.map-box { flex: 1 1 560px; min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin: 0; display: flex; flex-direction: column; gap: 12px; }
+.map-box svg { display: block; width: 100%; height: auto; max-height: 74vh; margin: 0 auto; touch-action: none; user-select: none; -webkit-user-select: none; }
+.readout { flex: 1 1 280px; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.card.blocked { border-color: var(--blocked); }
+.card.blocked .result-title { color: var(--blocked); }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; font-size: 14px; margin: 0; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; min-width: 0; }
+.eyebrow { font: 600 11px var(--font-body); letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); }
+.result-title { font-family: var(--font-display); font-size: 1.2rem; font-weight: 600; line-height: 1.25; }
+.zonelist { margin: 0; padding-left: 18px; font-size: 14px; }
+.wins { width: 100%; font-size: 13.5px; border-collapse: collapse; }
+.wins td { padding: 5px 0; border-bottom: 1px solid var(--line); }
+.wins tr:last-child td { border-bottom: 0; }
+.wins td:nth-child(2) { color: var(--muted); font-family: var(--font-body); font-size: 12px; text-align: center; }
+.wins td:last-child { text-align: right; }
+.wins tr.changed td { color: var(--result); font-weight: 500; }
+.keys-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+
+.try { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.sw { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+
+.zone { cursor: pointer; }
+.grip { cursor: ew-resize; }
+.grip.ns { cursor: ns-resize; }
+
+table.rules { border-collapse: collapse; width: 100%; font-size: 14px; }
+.table-wrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+.rules th, .rules td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.rules th { font: 600 12px var(--font-body); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.rules tr:last-child td { border-bottom: 0; }
+.rules td .sw { vertical-align: -2px; margin-right: 8px; }
+.rules td.k { white-space: nowrap; font-family: var(--font-mono); font-size: 13px; }
+
+.cat { display: flex; flex-direction: column; gap: 10px; }
+.cat h3 { margin: 0; font: 600 14px var(--font-body); color: var(--muted); }
+.minis { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.mini {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px; cursor: pointer;
+  display: flex; flex-direction: column; gap: 6px; text-align: left; font: inherit; color: inherit;
+}
+.mini[aria-pressed="true"] { border-color: var(--result); box-shadow: 0 0 0 1px var(--result); }
+.mini svg { width: 100%; height: auto; display: block; }
+.mini .cap { font-size: 12.5px; line-height: 1.35; }
+.mini .px { font-size: 11.5px; color: var(--muted); }
+.minis.portrait { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
+.notes { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; max-width: 78ch; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Eighths Snap Grid</h1>
+      <p class="lede">Each screen is split into eighths: 4 columns × 2 rows in landscape, 2 columns × 4 rows in portrait. Hold Ctrl while dragging a window to snap it into the grid. Once windows are in place, Ctrl+dragging an edge they share moves that grid line for every window on it, and later snaps use the moved line. Each monitor and each workspace keeps its own grid.</p>
+    </div>
+    <div class="toolbar">
+      <div class="seg" role="group" aria-label="Monitor">
+        <button id="btn-landscape" type="button" aria-pressed="true">Landscape 4 × 2</button>
+        <button id="btn-portrait" type="button" aria-pressed="false">Portrait 2 × 4</button>
+      </div>
+      <div class="seg" role="group" aria-label="Workspace">
+        <button id="btn-ws0" type="button" aria-pressed="true">Workspace 1</button>
+        <button id="btn-ws1" type="button" aria-pressed="false">Workspace 2</button>
+      </div>
+      <span class="monitor-note" id="monitor-note"></span>
+    </div>
+  </header>
+
+  <section aria-labelledby="demo-h">
+    <h2 id="demo-h">Move a grid line</h2>
+    <p>These windows were snapped into the grid. Every window edge has a grip. Drag one, holding the keys the way you would on the desktop.</p>
+    <div class="work">
+      <figure class="map-box">
+        <div class="keys-row">
+          <span class="hint">Keys:</span>
+          <button class="key" id="key-ctrl" type="button" aria-pressed="false">Ctrl</button>
+          <button class="key" id="key-shift" type="button" aria-pressed="false">Shift</button>
+          <span class="hint">Hold the real keys while dragging, or tap these to latch them.</span>
+        </div>
+        <svg id="demo" role="img" aria-label="Example screen with windows snapped into the grid. Each window edge has a grip to drag."></svg>
+        <figcaption class="legend">
+          <span><i class="sw" style="background:var(--result)"></i>Grip on a grid line</span>
+          <span><i class="sw" style="background:var(--grid)"></i>Grip on the screen edge</span>
+          <span><i class="sw" style="border:2px dashed var(--muted)"></i>Even eighths</span>
+          <span><i class="sw" style="border:2px dashed var(--grid)"></i>Window off the grid</span>
+        </figcaption>
+      </figure>
+      <aside class="readout">
+        <div class="card" id="d-card" aria-live="polite">
+          <div class="eyebrow">What happened</div>
+          <div id="d-title" class="result-title">Nothing yet</div>
+          <div id="d-detail" class="hint">Try the list below.</div>
+        </div>
+        <div class="card">
+          <div class="eyebrow">Try</div>
+          <ul class="try">
+            <li><b>Ctrl</b> + drag a shared edge: the line moves for every window on it.</li>
+            <li><b>Ctrl+Shift</b> + drag: the line jumps between the even-eighths positions.</li>
+            <li>Drag an edge <b>without Ctrl</b>: only that window resizes, and it leaves the grid.</li>
+            <li><b>Ctrl</b> + drag an edge on the screen edge: nothing moves.</li>
+            <li><b>Ctrl</b> + drag Editor's right edge far left: it glides past the hidden line between columns 1 and 2 without stopping, and Editor ends up one column wide.</li>
+            <li>Press or release <b>Ctrl</b> partway through a drag: it switches between moving the line and resizing one window, right away.</li>
+            <li>Switch workspace or monitor: each has its own grid.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <div class="eyebrow" id="d-wins-h">Windows</div>
+          <table class="wins mono"><tbody id="d-wins"></tbody></table>
+          <button class="btn" id="d-reset" type="button">Reset this workspace's grid</button>
+          <span class="hint">On the desktop: Super+Ctrl+G resets the grid on the monitor under the pointer, on the current workspace.</span>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <section aria-labelledby="map-h">
+    <h2 id="map-h">Drop zone map</h2>
+    <p>Where you can drop a window with Ctrl held, using this monitor's and workspace's grid as it is now. Move a line above and the bands follow. Hover or tap a band to see the window it gives.</p>
+    <div class="work">
+      <figure class="map-box">
+        <svg id="map" role="img" aria-label="Drop zone map of one screen. Bands along each grid line and screen edge are drop zones; the open middle of each cell is free movement."></svg>
+        <figcaption class="legend" id="legend"></figcaption>
+      </figure>
+      <aside class="readout" aria-live="polite">
+        <div class="card">
+          <div class="eyebrow">Pointer is in</div>
+          <div id="r-zone" class="result-title"></div>
+          <dl class="kv"><dt>Rule</dt><dd id="r-rule"></dd></dl>
+        </div>
+        <div class="card">
+          <div class="eyebrow">Window snaps to</div>
+          <div id="r-win" class="result-title"></div>
+          <dl class="kv">
+            <dt>Size</dt><dd id="r-size" class="mono"></dd>
+            <dt>Grid units</dt><dd id="r-units" class="mono"></dd>
+          </dl>
+        </div>
+        <div class="card">
+          <div class="eyebrow">Every band that gives this window</div>
+          <ul class="zonelist" id="r-others"></ul>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <section aria-labelledby="edge-h">
+    <h2 id="edge-h">Dragging a window edge</h2>
+    <div class="table-wrap">
+      <table class="rules">
+        <thead><tr><th>Keys</th><th>Edge on a grid line</th><th>Edge on the screen edge</th></tr></thead>
+        <tbody>
+          <tr><td class="k">none</td><td>Resizes only that window, as today. The window leaves the grid and stops following line moves.</td><td>Resizes only that window and it leaves the grid.</td></tr>
+          <tr><td class="k">Ctrl</td><td>Moves the grid line across the whole monitor. Every grid window with an edge on it follows, live. The line stops 200 px from its neighbours and the screen edges.</td><td>Nothing moves.</td></tr>
+          <tr><td class="k">Ctrl+Shift</td><td>Same, but the line jumps between the even-eighths positions, so it is easy to put back exactly.</td><td>Nothing moves.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>A line can't get closer than 200 px to the next line. When the edge you're dragging reaches that point, the drag carries on smoothly with the next line instead of stopping: that line takes over right where your edge is, every edge that was on your line moves onto it, and your original line goes back to where it was when the drag started. The edge never jumps, so you can size the window precisely past lines hidden inside a window. It works the same dragging back. If carrying on would squeeze a window to nothing, the edge stops at 200 px instead.</p>
+    <p>The keys are checked the whole time you drag, not just when you start. Press Ctrl partway through and the drag switches to moving the line; the window goes back on the grid if it had started to resize on its own. Release Ctrl and the line returns to where it was before the drag, and the drag carries on as a plain resize of that one window.</p>
+  </section>
+
+  <section aria-labelledby="rules-h">
+    <h2 id="rules-h">Snap rules</h2>
+    <p>The pointer position, not the window's edges, picks the band. Along each axis the pointer is either on an edge band, on a line band, or in the open middle of a cell. In the open middle on both axes, nothing snaps. Otherwise the first matching rule applies.</p>
+    <div class="table-wrap">
+      <table class="rules">
+        <thead><tr><th>Where you drop</th><th>Window you get</th><th>Covers</th></tr></thead>
+        <tbody id="rules-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="all-h">
+    <h2 id="all-h">All 30 windows the grid allows</h2>
+    <p id="all-intro"></p>
+    <div id="catalogue" style="display:flex;flex-direction:column;gap:22px"></div>
+  </section>
+
+  <section aria-labelledby="impl-h">
+    <h2 id="impl-h">How it behaves on the desktop</h2>
+    <ul class="notes">
+      <li>Snapping and moving lines only happen while Ctrl is held. Without Ctrl, dragging just moves or resizes a window, and clicking does nothing.</li>
+      <li>A grid line spans the whole monitor. Moving it in one row moves it in every row.</li>
+      <li>Only windows placed by the grid follow a line move. Each remembers which cells it covers. Moving or resizing a grid window without Ctrl drops it from the grid; snapping it again with Ctrl puts it back.</li>
+      <li>Each monitor and each workspace keeps its own grid, saved so it survives logging out. Super+Ctrl+G puts the grid on the monitor under the pointer, on the current workspace, back to even eighths.</li>
+      <li>A window's own minimum size can stop a line before the 200 px limit.</li>
+      <li>Ctrl+Shift while moving a window (not an edge) shows Shift's edge-snapping targets instead, and the grid doesn't snap.</li>
+      <li>Escape cancels an edge drag and puts every window back. Closing the window you are dragging cancels it too.</li>
+      <li>On the desktop the grid lines aren't drawn during an edge drag; only the windows move. This page draws them so you can see what is happening.</li>
+      <li>Sizes here are for 100% scale; on a HiDPI screen the 50 px bands and 200 px limit scale with it.</li>
+    </ul>
+  </section>
+</div>
+
+<script>
+const BAND = 50;
+const MIN_CELL = 200;
+const MIN_WIN = 150;
+const SCREENS = {
+  landscape: { w: 1920, h: 1044, long: 'x', note: 'To scale: a 1920 × 1080 screen with a 36 px panel (1920 × 1044 usable).' },
+  portrait:  { w: 1080, h: 1920, long: 'y', note: 'To scale: a 1080 × 1920 screen turned sideways.' },
+};
+const LAYOUTS = {
+  landscape: [
+    [
+      { name: 'Editor',   l: [1, 2], s: [1, 2] },
+      { name: 'Browser',  l: [3, 3], s: [1, 1] },
+      { name: 'Files',    l: [3, 3], s: [2, 2] },
+      { name: 'Terminal', l: [4, 4], s: [1, 2] },
+    ],
+    [
+      { name: 'Mail',     l: [1, 1], s: [1, 2] },
+      { name: 'Calendar', l: [2, 4], s: [1, 1] },
+      { name: 'Music',    l: [2, 3], s: [2, 2] },
+      { name: 'Notes',    l: [4, 4], s: [2, 2] },
+    ],
+  ],
+  portrait: [
+    [
+      { name: 'Browser',  l: [1, 2], s: [1, 2] },
+      { name: 'Terminal', l: [3, 3], s: [1, 1] },
+      { name: 'Notes',    l: [3, 3], s: [2, 2] },
+      { name: 'Chat',     l: [4, 4], s: [1, 2] },
+    ],
+    [
+      { name: 'Docs',     l: [1, 2], s: [1, 1] },
+      { name: 'Chat',     l: [1, 2], s: [2, 2] },
+      { name: 'Monitor',  l: [3, 4], s: [1, 2] },
+    ],
+  ],
+};
+const RULES = {
+  touch:  { color: 'var(--touch)',  label: 'Touching cells' },
+  corner: { color: 'var(--corner)', label: 'Corner' },
+  edge:   { color: 'var(--edge)',   label: 'Long-side edge' },
+  strip:  { color: 'var(--strip)',  label: 'Short-side edge, quarter line' },
+  max:    { color: 'var(--max)',    label: 'Short-side edge, center line' },
+};
+const NS = 'http://www.w3.org/2000/svg';
+
+let orient = 'landscape';
+let ws = 0;
+
+function defaultGrid(o) {
+  const S = SCREENS[o];
+  const L = S.long === 'x' ? S.w : S.h, Sh = S.long === 'x' ? S.h : S.w;
+  return { long: [1, 2, 3].map(i => Math.round(i * L / 4)), short: [Math.round(Sh / 2)] };
+}
+function freshWorkspace(o, i) {
+  return { grid: defaultGrid(o), wins: structuredClone(LAYOUTS[o][i]).map(w => ({ ...w, free: null })) };
+}
+// One grid per monitor per workspace.
+const state = {};
+for (const o of ['landscape', 'portrait']) state[o] = [0, 1].map(i => freshWorkspace(o, i));
+const cur = () => state[orient][ws];
+const G = () => cur().grid;
+
+function el(tag, attrs, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function lens() {
+  const S = SCREENS[orient];
+  return S.long === 'x' ? [S.w, S.h] : [S.h, S.w];
+}
+const posOf = (grid, axis) => { const [L, Sh] = lens(); return axis === 'long' ? [0, ...grid.long, L] : [0, ...grid.short, Sh]; };
+const posLong = () => posOf(G(), 'long');
+const posShort = () => posOf(G(), 'short');
+
+function regions(p) {
+  const n = p.length - 1;
+  const out = [{ kind: 'edge', i: 0, a: 0, b: BAND }];
+  for (let k = 1; k <= n; k++) {
+    out.push({ kind: 'cell', i: k, a: p[k - 1] + BAND, b: p[k] - BAND });
+    if (k < n) out.push({ kind: 'line', i: k, a: p[k] - BAND, b: p[k] + BAND });
+  }
+  out.push({ kind: 'edge', i: n, a: p[n] - BAND, b: p[n] });
+  return out;
+}
+function coreSpan(c, n) {
+  if (c.kind === 'cell') return [c.i, c.i];
+  if (c.kind === 'line') return [c.i, c.i + 1];
+  return c.i === 0 ? [1, 1] : [n, n];
+}
+function resolve(L, S) {
+  const Le = L.kind === 'edge', Se = S.kind === 'edge';
+  if (L.kind === 'cell' && S.kind === 'cell') return null;
+  if (Le && Se) return { l: L.i === 0 ? [1, 2] : [3, 4], s: S.i === 0 ? [1, 1] : [2, 2], rule: 'corner' };
+  if (Le) return { l: L.i === 0 ? [1, 3] : [2, 4], s: coreSpan(S, 2), rule: 'edge' };
+  if (Se && L.kind === 'line') {
+    if (L.i === 2) return { l: [1, 4], s: [1, 2], rule: 'max' };
+    return { l: [1, 4], s: S.i === 0 ? [1, 1] : [2, 2], rule: 'strip' };
+  }
+  return { l: coreSpan(L, 4), s: coreSpan(S, 2), rule: 'touch' };
+}
+function axisRect(la, lb, sa, sb) {
+  return SCREENS[orient].long === 'x' ? { x: la, y: sa, w: lb - la, h: sb - sa } : { x: sa, y: la, w: sb - sa, h: lb - la };
+}
+function rectFor(l, s) {
+  const pl = posLong(), ps = posShort();
+  return axisRect(pl[l[0] - 1], pl[l[1]], ps[s[0] - 1], ps[s[1]]);
+}
+const winRect = w => w.free || rectFor(w.l, w.s);
+
+// ---- Names ----
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+function longName(c) {
+  const land = orient === 'landscape', unit = land ? 'column' : 'row';
+  if (c.kind === 'edge') return land ? (c.i === 0 ? 'left edge' : 'right edge') : (c.i === 0 ? 'top edge' : 'bottom edge');
+  if (c.kind === 'cell') return `middle of ${unit} ${c.i}`;
+  return `line between ${unit}s ${c.i} and ${c.i + 1}`;
+}
+function shortName(c) {
+  const land = orient === 'landscape';
+  if (c.kind === 'edge') return land ? (c.i === 0 ? 'top edge' : 'bottom edge') : (c.i === 0 ? 'left edge' : 'right edge');
+  if (c.kind === 'cell') return land ? (c.i === 1 ? 'middle of top row' : 'middle of bottom row') : (c.i === 1 ? 'middle of left column' : 'middle of right column');
+  return 'middle line';
+}
+function zoneName(z) {
+  const parts = orient === 'landscape' ? [longName(z.L), shortName(z.S)] : [shortName(z.S), longName(z.L)];
+  return cap(parts[0]) + ' × ' + parts[1];
+}
+function lineName(axis, idx) {
+  const land = orient === 'landscape';
+  if (axis === 'short') return land ? 'The middle line (between the rows)' : 'The middle line (between the columns)';
+  return `The line between ${land ? 'columns' : 'rows'} ${idx + 1} and ${idx + 2}`;
+}
+function spanText(a, b, unit) { return a === b ? `${unit} ${a}` : `${unit}s ${a}–${b}`; }
+function winName(r) {
+  if (r.l[0] === 1 && r.l[1] === 4 && r.s[0] === 1 && r.s[1] === 2) return 'Whole screen (maximized)';
+  const land = orient === 'landscape';
+  const longPart = r.l[0] === 1 && r.l[1] === 4 ? (land ? 'full width' : 'full height') : spanText(r.l[0], r.l[1], land ? 'column' : 'row');
+  const shortPart = land
+    ? (r.s[0] === r.s[1] ? (r.s[0] === 1 ? 'top row' : 'bottom row') : 'both rows')
+    : (r.s[0] === r.s[1] ? (r.s[0] === 1 ? 'left column' : 'right column') : 'both columns');
+  return land ? `${cap(longPart)}, ${shortPart}` : `${cap(shortPart)}, ${longPart}`;
+}
+const keyOf = r => `${r.l[0]}-${r.l[1]}|${r.s[0]}-${r.s[1]}`;
+function unitsText(r) {
+  const a = r.l[1] - r.l[0] + 1, b = r.s[1] - r.s[0] + 1;
+  return orient === 'landscape' ? `${a} of 4 wide × ${b} of 2 tall` : `${b} of 2 wide × ${a} of 4 tall`;
+}
+const sizeText = r => `${Math.round(r.w)} × ${Math.round(r.h)}`;
+
+// Is a line on this axis drawn vertically?
+const isVertical = axis => (axis === 'long') === (SCREENS[orient].long === 'x');
+
+function gridLines(svg, grid, attrs) {
+  const S = SCREENS[orient];
+  for (const axis of ['long', 'short']) {
+    for (const v of grid[axis]) {
+      if (isVertical(axis)) el('line', { x1: v, y1: 0, x2: v, y2: S.h, ...attrs }, svg);
+      else el('line', { x1: 0, y1: v, x2: S.w, y2: v, ...attrs }, svg);
+    }
+  }
+}
+const labelFont = () => orient === 'landscape' ? 30 : 34;
+function text(svg, x, y, s, attrs = {}) {
+  const e = el('text', { x, y, 'font-size': labelFont(), fill: 'var(--muted)', 'font-family': 'IBM Plex Sans, system-ui, sans-serif', ...attrs }, svg);
+  e.textContent = s;
+  return e;
+}
+
+// ================= Keys =================
+const keys = { ctrl: false, shift: false };       // physical keys held
+const latched = { ctrl: false, shift: false };    // on-page switches
+const ctrlOn = e => !!(e && e.ctrlKey) || keys.ctrl || latched.ctrl;
+const shiftOn = e => !!(e && e.shiftKey) || keys.shift || latched.shift;
+function paintKeys() {
+  for (const k of ['ctrl', 'shift']) {
+    const b = document.getElementById('key-' + k);
+    b.setAttribute('aria-pressed', String(latched[k]));
+    b.classList.toggle('held', keys[k]);
+  }
+}
+function onKey(e, down) {
+  if (e.key !== 'Control' && e.key !== 'Shift') return;
+  if (e.key === 'Control') keys.ctrl = down;
+  if (e.key === 'Shift') keys.shift = down;
+  if (e.repeat) return;
+  paintKeys();
+  keysChanged();
+}
+addEventListener('keydown', e => onKey(e, true));
+addEventListener('keyup', e => onKey(e, false));
+addEventListener('blur', () => { keys.ctrl = keys.shift = false; paintKeys(); keysChanged(); });
+for (const k of ['ctrl', 'shift']) {
+  document.getElementById('key-' + k).addEventListener('click', () => { latched[k] = !latched[k]; paintKeys(); keysChanged(); });
+}
+
+// ================= Demo: move a grid line =================
+let drag = null;   // current drag, see startDrag
+let startSizes = new Map();
+
+// For a window side, which grid line it sits on, or 'outer', or null (off grid).
+function sideInfo(w, side) {
+  if (w.free) return null;
+  const land = orient === 'landscape';
+  const map = land
+    ? { left: ['long', 0], right: ['long', 1], top: ['short', 0], bottom: ['short', 1] }
+    : { top: ['long', 0], bottom: ['long', 1], left: ['short', 0], right: ['short', 1] };
+  const [axis, end] = map[side];
+  const span = axis === 'long' ? w.l : w.s;
+  const n = axis === 'long' ? 4 : 2;
+  if (end === 0) return span[0] > 1 ? { axis, idx: span[0] - 2 } : 'outer';
+  return span[1] < n ? { axis, idx: span[1] - 1 } : 'outer';
+}
+function isOuter(w, side) {
+  const S = SCREENS[orient], r = winRect(w);
+  if (!w.free) return sideInfo(w, side) === 'outer';
+  return (side === 'left' && r.x <= 0) || (side === 'top' && r.y <= 0) ||
+    (side === 'right' && r.x + r.w >= S.w) || (side === 'bottom' && r.y + r.h >= S.h);
+}
+
+function drawDemo() {
+  const S = SCREENS[orient];
+  const svg = document.getElementById('demo');
+  svg.innerHTML = '';
+  const pad = 30;
+  svg.setAttribute('viewBox', `${-pad} ${-pad} ${S.w + pad * 2} ${S.h + pad * 2}`);
+  el('rect', { x: 0, y: 0, width: S.w, height: S.h, fill: 'var(--free)', stroke: 'var(--grid)', 'stroke-width': 4 }, svg);
+
+  // Even eighths, dashed; brighter while Ctrl+Shift snapping to them.
+  const act = drag && drag.action;
+  const snapping = act && act.kind === 'line' && act.snapped;
+  gridLines(svg, defaultGrid(orient), {
+    stroke: snapping ? 'var(--result)' : 'var(--muted)', 'stroke-width': snapping ? 6 : 3,
+    'stroke-dasharray': '14 12', 'stroke-opacity': snapping ? 1 : 0.7,
+  });
+
+  if (act && act.kind === 'line') {
+    const at = (act.axis === 'long' ? posLong() : posShort())[act.idx + 1];
+    if (isVertical(act.axis)) el('rect', { x: at - 6, y: 0, width: 12, height: S.h, fill: 'var(--result)' }, svg);
+    else el('rect', { x: 0, y: at - 6, width: S.w, height: 12, fill: 'var(--result)' }, svg);
+  }
+
+  const fs = labelFont(), g = 10;
+  for (const w of cur().wins) {
+    const r = winRect(w);
+    const changed = drag && startSizes.get(w.name) !== sizeText(r);
+    el('rect', {
+      x: r.x + g, y: r.y + g, width: r.w - 2 * g, height: r.h - 2 * g, rx: 10, fill: 'var(--win)',
+      stroke: changed ? 'var(--result)' : 'var(--grid)', 'stroke-width': changed ? 6 : 3,
+      ...(w.free ? { 'stroke-dasharray': '18 10' } : {}),
+    }, svg);
+    el('rect', { x: r.x + g, y: r.y + g, width: r.w - 2 * g, height: fs * 1.6, rx: 10, fill: 'var(--win-bar)' }, svg);
+    text(svg, r.x + g + 18, r.y + g + fs * 1.12, w.name, { fill: 'var(--fg)', 'font-weight': 600 });
+    text(svg, r.x + r.w / 2, r.y + r.h / 2 + fs * 0.4, sizeText(r), { 'text-anchor': 'middle', 'font-family': 'IBM Plex Mono, ui-monospace, monospace', fill: changed ? 'var(--result)' : 'var(--muted)' });
+    if (w.free) text(svg, r.x + r.w / 2, r.y + r.h / 2 + fs * 1.6, 'off the grid', { 'text-anchor': 'middle', 'font-size': fs * 0.8 });
+
+    // One grip per side, just inside the window.
+    for (const side of ['left', 'right', 'top', 'bottom']) {
+      const outer = isOuter(w, side);
+      const vert = side === 'left' || side === 'right';
+      const inset = 26;
+      const cx = side === 'left' ? r.x + inset : side === 'right' ? r.x + r.w - inset : r.x + r.w / 2;
+      const cy = side === 'top' ? r.y + inset + fs * 1.7 : side === 'bottom' ? r.y + r.h - inset : r.y + r.h / 2;
+      const len = Math.min(110, (vert ? r.h : r.w) * 0.35);
+      const grp = el('g', { class: 'grip' + (vert ? '' : ' ns'), tabindex: '0', role: 'button', 'aria-label': `${w.name}, ${side} edge` }, svg);
+      if (vert) {
+        el('rect', { x: cx - 36, y: cy - len / 2 - 20, width: 72, height: len + 40, fill: 'transparent' }, grp);
+        el('rect', { x: cx - 11, y: cy - len / 2, width: 22, height: len, rx: 11, fill: outer ? 'var(--grid)' : 'var(--result)', stroke: 'var(--win)', 'stroke-width': 4 }, grp);
+      } else {
+        el('rect', { x: cx - len / 2 - 20, y: cy - 36, width: len + 40, height: 72, fill: 'transparent' }, grp);
+        el('rect', { x: cx - len / 2, y: cy - 11, width: len, height: 22, rx: 11, fill: outer ? 'var(--grid)' : 'var(--result)', stroke: 'var(--win)', 'stroke-width': 4 }, grp);
+      }
+      grp.addEventListener('pointerdown', e => startDrag(e, w, side));
+      grp.addEventListener('keydown', e => keyDrag(e, w, side));
+    }
+  }
+  drawWinTable();
+}
+
+function svgCoord(e) {
+  const svg = document.getElementById('demo');
+  const pt = svg.createSVGPoint();
+  pt.x = e.clientX; pt.y = e.clientY;
+  return pt.matrixTransform(svg.getScreenCTM().inverse());
+}
+function snapshotSizes() {
+  startSizes = new Map(cur().wins.map(w => [w.name, sizeText(winRect(w))]));
+}
+
+// Decide what a drag on this side does, given the keys held when it starts.
+function beginAction(w, side, e) {
+  const ctrl = ctrlOn(e);
+  const info = sideInfo(w, side);
+  if (ctrl && isOuter(w, side)) return { kind: 'blocked', w, side };
+  if (ctrl && info && info !== 'outer') return { kind: 'line', axis: info.axis, idx: info.idx, from: G()[info.axis][info.idx], snapped: false };
+  return { kind: 'resize', w, side, wasOnGrid: !w.free };
+}
+
+function setLineTo(d, v, shift) {
+  const p = posOf(G(), d.axis);
+  const lo = p[d.idx] + MIN_CELL, hi = p[d.idx + 2] - MIN_CELL;
+  d.snapped = false;
+  if (shift) {
+    const even = defaultGrid(orient)[d.axis].filter(x => x >= lo && x <= hi);
+    if (even.length) {
+      v = even.reduce((a, b) => Math.abs(b - v) < Math.abs(a - v) ? b : a);
+      d.snapped = true;
+    }
+  }
+  G()[d.axis][d.idx] = Math.round(Math.min(Math.max(v, lo), hi));
+}
+
+// Move a grid line to t. Where the line would hit its MIN_CELL limit next to
+// another line, the drag hands off to that line instead of stopping: every
+// window edge on the line being dragged moves onto the next line, which takes
+// over at exactly t, and the line being dragged goes back to where it was
+// when the drag started (inside a window now). The edge you see moves without
+// a jump, so it can pass lines hidden inside a window. It doesn't hand off if
+// that would squeeze a window to nothing; then the limit holds.
+function moveLine(action, t, shift) {
+  const axis = action.axis, key = axis === 'long' ? 'l' : 's';
+  const n = axis === 'long' ? 4 : 2;
+  const pos = i => posOf(G(), axis)[i];    // line i; 0 and n are the screen edges
+  const start = action.idx + 1;
+  let a = start;
+  // Same as the extension: the direction is fixed, so a hand-off can't
+  // bounce back and forth, and the line handed off is pushed ahead of the
+  // pointer so the edge never jumps on narrow cells.
+  const dir = Math.sign(t - pos(a));
+  for (let step = 0; dir && step < n; step++) {
+    const j = a + dir;
+    if (j < 1 || j > n - 1) break;
+    const reached = dir < 0 ? t <= pos(j) + MIN_CELL : t >= pos(j) - MIN_CELL;
+    if (!reached || !canHandoff(key, a, j)) break;
+    handoff(key, a, j);
+    const far = pos(a - dir);
+    G()[axis][a - 1] = dir < 0
+      ? Math.min(Math.max(pos(a), t + MIN_CELL), far - MIN_CELL)
+      : Math.max(Math.min(pos(a), t - MIN_CELL), far + MIN_CELL);
+    a = j;
+  }
+  action.idx = a - 1;
+  action.handedFrom = a !== start ? start - 1 : null;
+  if (a !== start) action.from = G()[axis][a - 1];
+  setLineTo(action, t, shift);
+}
+// Spans are cell numbers; cell c lies between lines c-1 and c.
+function canHandoff(key, a, j) {
+  return cur().wins.every(w => {
+    if (w.free) return true;
+    const [c0, c1] = w[key];
+    // A window covering only the cell being crossed would vanish.
+    return j < a ? !(c0 === a && c1 === a) : !(c0 === a + 1 && c1 === a + 1);
+  });
+}
+function handoff(key, a, j) {
+  for (const w of cur().wins) {
+    if (w.free) continue;
+    const sp = w[key];
+    if (sp[1] === a) sp[1] = j;           // right or bottom edge on line a
+    if (sp[0] === a + 1) sp[0] = j + 1;   // left or top edge on line a
+  }
+}
+
+function resizeAlone(d, v) {
+  const w = d.w, S = SCREENS[orient];
+  if (!w.free) w.free = { ...winRect(w) };
+  const r = w.free;
+  if (d.side === 'left') { const right = r.x + r.w; r.x = Math.max(0, Math.min(v, right - MIN_WIN)); r.w = right - r.x; }
+  if (d.side === 'right') { r.w = Math.max(MIN_WIN, Math.min(v, S.w) - r.x); }
+  if (d.side === 'top') { const bottom = r.y + r.h; r.y = Math.max(0, Math.min(v, bottom - MIN_WIN)); r.h = bottom - r.y; }
+  if (d.side === 'bottom') { r.h = Math.max(MIN_WIN, Math.min(v, S.h) - r.y); }
+  for (const k of ['x', 'y', 'w', 'h']) r[k] = Math.round(r[k]);
+}
+
+// Recompute the drag from scratch: start from the layout as it was when the
+// drag began, then apply what the keys held right now say to do. So pressing
+// Ctrl at any point switches to moving the grid line, and releasing it puts
+// the line back and resizes just the one window.
+function applyDrag(e) {
+  const d = drag;
+  state[orient][ws] = structuredClone(d.snapshot);
+  const w = cur().wins.find(x => x.name === d.name);
+  const action = beginAction(w, d.side, { ctrlKey: ctrlOn(e) });
+  const delta = d.vertical ? d.pt.x - d.startPt.x : d.pt.y - d.startPt.y;
+  if (action.kind === 'line') {
+    moveLine(action, G()[action.axis][action.idx] + delta, shiftOn(e));
+  } else if (action.kind === 'resize' && delta !== 0) {
+    const r = winRect(w);
+    const edge = { left: r.x, right: r.x + r.w, top: r.y, bottom: r.y + r.h }[d.side];
+    resizeAlone(action, edge + delta);
+  }
+  d.action = action;
+  report(action);
+  drawDemo();
+  drawMap(false);
+}
+
+function report(d) {
+  const card = document.getElementById('d-card');
+  card.classList.toggle('blocked', d.kind === 'blocked');
+  const t = document.getElementById('d-title'), det = document.getElementById('d-detail');
+  if (d.kind === 'blocked') {
+    t.textContent = 'Blocked: that edge is on the screen edge';
+    det.textContent = 'With Ctrl held, dragging an outer edge does nothing. Without Ctrl it resizes just that window.';
+  } else if (d.kind === 'line') {
+    const to = G()[d.axis][d.idx], even = defaultGrid(orient)[d.axis][d.idx];
+    const moved = cur().wins.filter(w => startSizes.get(w.name) !== sizeText(winRect(w))).map(w => w.name);
+    t.textContent = `${lineName(d.axis, d.idx)} moved`;
+    det.textContent = (d.handedFrom != null
+      ? `Carried on from ${lineName(d.axis, d.handedFrom).replace(/^The/, 'the')}, which went back to where it was. `
+      : '') +
+      `${d.from} → ${to} px from the ${isVertical(d.axis) ? 'left' : 'top'}` +
+      (d.snapped ? ' (snapped to an even-eighths position)' : to === even ? ' (back on even eighths)' : '') +
+      (moved.length ? `. Followed: ${moved.join(', ')}.` : '.');
+  } else {
+    t.textContent = `${d.w.name} resized on its own`;
+    det.textContent = d.wasOnGrid
+      ? 'No Ctrl, so only this window changed. It is now off the grid and won\'t follow line moves until you Ctrl-snap it again.'
+      : 'This window is off the grid, so the edge just resizes it.';
+  }
+}
+
+function startDrag(e, w, side) {
+  e.preventDefault();
+  snapshotSizes();
+  const pt = svgCoord(e);
+  drag = {
+    name: w.name, side, vertical: side === 'left' || side === 'right',
+    snapshot: structuredClone(cur()), startPt: pt, pt, action: null,
+  };
+  applyDrag(e);
+  const svg = document.getElementById('demo');
+  svg.setPointerCapture(e.pointerId);
+  const move = ev => {
+    drag.pt = svgCoord(ev);
+    applyDrag(ev);
+  };
+  const up = () => {
+    svg.removeEventListener('pointermove', move);
+    svg.removeEventListener('pointerup', up);
+    svg.removeEventListener('pointercancel', up);
+    report(drag.action);
+    drag = null;
+    drawDemo();
+    drawMap(true);
+    drawCatalogue();
+  };
+  svg.addEventListener('pointermove', move);
+  svg.addEventListener('pointerup', up);
+  svg.addEventListener('pointercancel', up);
+}
+
+// Pressing or releasing Ctrl/Shift mid-drag takes effect at once, even if
+// the pointer doesn't move.
+function keysChanged() {
+  if (drag) applyDrag(null);
+}
+
+// Keyboard: arrows move the focused edge, using the latched or held keys.
+function keyDrag(e, w, side) {
+  const vert = side === 'left' || side === 'right';
+  const step = { ArrowLeft: -20, ArrowRight: 20, ArrowUp: -20, ArrowDown: 20 }[e.key];
+  if (step === undefined || vert !== (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) return;
+  e.preventDefault();
+  snapshotSizes();
+  const d = beginAction(w, side, e);
+  if (d.kind === 'line') {
+    const cur0 = G()[d.axis][d.idx];
+    let target = cur0 + step;
+    if (shiftOn(e)) {
+      // Jump to the next even position in that direction.
+      const even = defaultGrid(orient)[d.axis].filter(x => step > 0 ? x > cur0 : x < cur0);
+      if (even.length) target = step > 0 ? Math.min(...even) : Math.max(...even);
+    }
+    setLineTo(d, target, shiftOn(e));
+  } else if (d.kind === 'resize') {
+    const r = winRect(w);
+    const edge = { left: r.x, right: r.x + r.w, top: r.y, bottom: r.y + r.h }[side];
+    resizeAlone(d, edge + step);
+  }
+  drag = { action: d };
+  report(d);
+  drawDemo(); drawMap(true); drawCatalogue();
+  drag = null;
+  const again = [...document.querySelectorAll('#demo .grip')].find(g => g.getAttribute('aria-label') === `${w.name}, ${side} edge`);
+  if (again) again.focus();
+}
+
+function drawWinTable() {
+  document.getElementById('d-wins-h').textContent = `Windows on ${orient === 'landscape' ? 'the landscape monitor' : 'the portrait monitor'}, workspace ${ws + 1}`;
+  const tb = document.getElementById('d-wins');
+  tb.innerHTML = '';
+  for (const w of cur().wins) {
+    const r = winRect(w);
+    const tr = document.createElement('tr');
+    if (drag && startSizes.get(w.name) !== sizeText(r)) tr.className = 'changed';
+    tr.innerHTML = `<td>${w.name}</td><td>${w.free ? 'off grid' : 'on grid'}</td><td>${sizeText(r)}</td>`;
+    tb.appendChild(tr);
+  }
+  const fresh = freshWorkspace(orient, ws);
+  const changed = JSON.stringify(G()) !== JSON.stringify(fresh.grid) || cur().wins.some(w => w.free);
+  document.getElementById('d-reset').disabled = !changed;
+}
+document.getElementById('d-reset').addEventListener('click', () => {
+  state[orient][ws] = freshWorkspace(orient, ws);
+  document.getElementById('d-card').classList.remove('blocked');
+  document.getElementById('d-title').textContent = `Workspace ${ws + 1} reset`;
+  document.getElementById('d-detail').textContent = 'Grid back to even eighths, and every window back on it.';
+  drawDemo(); drawMap(true); drawCatalogue();
+});
+
+// ================= Drop zone map =================
+let zones = [], zoneEls = [], overlay = null, selectedKey = null;
+
+function buildZones() {
+  const out = [];
+  for (const L of regions(posLong())) {
+    for (const Sh of regions(posShort())) {
+      out.push({ L, S: Sh, res: resolve(L, Sh), rect: axisRect(L.a, L.b, Sh.a, Sh.b) });
+    }
+  }
+  return out;
+}
+
+function drawMap(reselect) {
+  const S = SCREENS[orient];
+  zones = buildZones();
+  const svg = document.getElementById('map');
+  svg.innerHTML = '';
+  const pad = 70;
+  // Room on the left for the row labels ("bottom" is the widest).
+  const left = S.long === 'x' ? 130 : 100;
+  svg.setAttribute('viewBox', `${-left} ${-pad} ${S.w + left + pad * 0.4} ${S.h + pad * 1.4}`);
+  el('rect', { x: 0, y: 0, width: S.w, height: S.h, fill: 'var(--free)' }, svg);
+  zoneEls = [];
+  zones.forEach((z, idx) => {
+    if (!z.res) return;
+    const g = el('g', { class: 'zone', tabindex: '0', role: 'button', 'aria-label': zoneName(z) + ': ' + winName(z.res) }, svg);
+    el('rect', { x: z.rect.x + 1, y: z.rect.y + 1, width: z.rect.w - 2, height: z.rect.h - 2, fill: RULES[z.res.rule].color, 'fill-opacity': 0.55, stroke: 'var(--panel)', 'stroke-width': 2 }, g);
+    g.addEventListener('mouseenter', () => selectZone(idx));
+    g.addEventListener('focus', () => selectZone(idx));
+    g.addEventListener('click', () => selectZone(idx));
+    zoneEls[idx] = g;
+  });
+  gridLines(svg, G(), { stroke: 'var(--grid)', 'stroke-width': 3 });
+  el('rect', { x: 0, y: 0, width: S.w, height: S.h, fill: 'none', stroke: 'var(--grid)', 'stroke-width': 4 }, svg);
+  const pl = posLong(), ps = posShort();
+  if (S.long === 'x') {
+    for (let k = 1; k <= 4; k++) text(svg, (pl[k - 1] + pl[k]) / 2, -22, `column ${k}`, { 'text-anchor': 'middle' });
+    text(svg, -18, (ps[0] + ps[1]) / 2 + 10, 'top', { 'text-anchor': 'end' });
+    text(svg, -18, (ps[1] + ps[2]) / 2 + 10, 'bottom', { 'text-anchor': 'end' });
+  } else {
+    text(svg, (ps[0] + ps[1]) / 2, -22, 'left', { 'text-anchor': 'middle' });
+    text(svg, (ps[1] + ps[2]) / 2, -22, 'right', { 'text-anchor': 'middle' });
+    for (let k = 1; k <= 4; k++) text(svg, -18, (pl[k - 1] + pl[k]) / 2 + 10, `row ${k}`, { 'text-anchor': 'end' });
+  }
+  overlay = el('g', { 'pointer-events': 'none' }, svg);
+  if (!selectedKey) return;
+  if (reselect !== false) selectKey(selectedKey);
+  else showResult(zones.find(z => z.res && keyOf(z.res) === selectedKey).res);
+}
+
+function selectZone(idx) {
+  const z = zones[idx];
+  selectedKey = keyOf(z.res);
+  showResult(z.res);
+  document.getElementById('r-zone').textContent = zoneName(z);
+  document.getElementById('r-rule').textContent = RULES[z.res.rule].label + ': ' + ruleText(z.res.rule);
+  markZones(selectedKey, idx);
+  selectMini(selectedKey);
+}
+function selectKey(key) {
+  const matches = zones.map((z, i) => [z, i]).filter(([z]) => z.res && keyOf(z.res) === key);
+  if (!matches.length) return;
+  selectedKey = key;
+  const [z0] = matches[0];
+  showResult(z0.res);
+  document.getElementById('r-zone').textContent = matches.length === 1 ? zoneName(z0) : `${matches.length} bands (outlined)`;
+  document.getElementById('r-rule').textContent = [...new Set(matches.map(([z]) => RULES[z.res.rule].label))].join(', ');
+  markZones(key, -1);
+  selectMini(key);
+}
+function showResult(res) {
+  const r = rectFor(res.l, res.s);
+  overlay.innerHTML = '';
+  el('rect', { x: r.x + 6, y: r.y + 6, width: r.w - 12, height: r.h - 12, fill: 'var(--result)', 'fill-opacity': 0.16, stroke: 'var(--result)', 'stroke-width': 10, 'stroke-dasharray': '28 14', rx: 6 }, overlay);
+  document.getElementById('r-win').textContent = winName(res);
+  document.getElementById('r-size').textContent = `${sizeText(r)} px at ${Math.round(r.x)}, ${Math.round(r.y)}`;
+  document.getElementById('r-units').textContent = unitsText(res);
+  const list = document.getElementById('r-others');
+  list.innerHTML = '';
+  zones.filter(z => z.res && keyOf(z.res) === keyOf(res)).forEach(z => {
+    const li = document.createElement('li');
+    li.textContent = zoneName(z);
+    list.appendChild(li);
+  });
+}
+function markZones(key, current) {
+  zones.forEach((z, i) => {
+    const g = zoneEls[i];
+    if (!g) return;
+    const rect = g.firstChild, same = keyOf(z.res) === key;
+    rect.setAttribute('fill-opacity', same ? 0.95 : 0.4);
+    rect.setAttribute('stroke', i === current ? 'var(--fg)' : same ? 'var(--result)' : 'var(--panel)');
+    rect.setAttribute('stroke-width', i === current || same ? 6 : 2);
+  });
+}
+function ruleText(rule) {
+  const land = orient === 'landscape';
+  return {
+    touch: 'covers every cell touching the spot you drop on.',
+    corner: 'the quarter of the screen in that corner.',
+    edge: land ? 'a ¾-wide window against that edge.' : 'a ¾-tall window against that edge.',
+    strip: land ? 'a full-width strip along that edge.' : 'a full-height column along that edge.',
+    max: 'the whole screen.',
+  }[rule];
+}
+function drawLegend() {
+  const lg = document.getElementById('legend');
+  lg.innerHTML = '';
+  const add = (color, t, extra = '') => {
+    const s = document.createElement('span');
+    s.innerHTML = `<i class="sw" style="background:${color};${extra}"></i>`;
+    s.append(t);
+    lg.appendChild(s);
+  };
+  for (const k in RULES) add(RULES[k].color, RULES[k].label);
+  add('var(--free)', 'No snap', 'border:1px solid var(--line)');
+  add('transparent', 'Window it snaps to', 'border:2px dashed var(--result)');
+}
+function drawRules() {
+  const land = orient === 'landscape';
+  const rows = [
+    ['corner', 'Any corner', 'Quarter of the screen in that corner', land ? '2 columns × 1 row' : '1 column × 2 rows'],
+    ['edge', land ? 'Left or right edge, away from corners' : 'Top or bottom edge, away from corners', land ? '¾ width against that edge; where you are along the edge picks top row, both rows (middle line) or bottom row' : '¾ height against that edge; where you are along it picks the column', land ? '3 columns × 1 or 2 rows' : '3 rows × 1 or 2 columns'],
+    ['max', land ? 'Top or bottom edge, on the center line' : 'Left or right edge, on the center line', 'Maximized', 'Whole screen'],
+    ['strip', land ? 'Top or bottom edge, on another line' : 'Left or right edge, on another line', land ? 'Full-width strip along that edge' : 'Full-height column along that edge', land ? '4 columns × 1 row' : '1 column × 4 rows'],
+    ['touch', 'Anywhere else in a band', 'Every cell touching where you drop: on a line, the cells either side; on a line crossing, the 4 cells around it; on an edge at the middle of a cell, that cell', '1–2 × 1–2'],
+  ];
+  const tb = document.getElementById('rules-body');
+  tb.innerHTML = '';
+  for (const [rule, where, what, covers] of rows) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td><i class="sw" style="background:${RULES[rule].color}"></i>${where}</td><td>${what}</td><td class="mono" style="white-space:nowrap">${covers}</td>`;
+    tb.appendChild(tr);
+  }
+}
+
+// ================= Catalogue =================
+function drawCatalogue() {
+  const land = orient === 'landscape';
+  const S = SCREENS[orient];
+  const byKey = new Map();
+  for (const z of zones) {
+    if (!z.res) continue;
+    const k = keyOf(z.res);
+    if (!byKey.has(k)) byKey.set(k, { res: z.res, n: 0 });
+    byKey.get(k).n++;
+  }
+  document.getElementById('all-intro').textContent =
+    `A window can cover any run of 1 to 4 ${land ? 'columns' : 'rows'} (10 runs) and the top, bottom or both ${land ? 'rows' : 'columns'} (3 choices): 30 rectangles, and the rules reach ${byKey.size === 30 ? 'all 30' : byKey.size + ' of 30'}. Sizes follow this workspace's grid. Tap one to see its bands on the map.`;
+  const cat = document.getElementById('catalogue');
+  cat.innerHTML = '';
+  for (let len = 1; len <= 4; len++) {
+    const items = [...byKey.values()].filter(v => v.res.l[1] - v.res.l[0] + 1 === len)
+      .sort((a, b) => a.res.l[0] - b.res.l[0] || (a.res.s[1] - a.res.s[0]) - (b.res.s[1] - b.res.s[0]) || a.res.s[0] - b.res.s[0]);
+    const box = document.createElement('div');
+    box.className = 'cat';
+    const h = document.createElement('h3');
+    h.textContent = `${len} ${land ? 'column' : 'row'}${len > 1 ? 's' : ''} ${land ? 'wide' : 'tall'} · ${items.length} windows`;
+    box.appendChild(h);
+    const gridEl = document.createElement('div');
+    gridEl.className = 'minis' + (land ? '' : ' portrait');
+    for (const it of items) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'mini';
+      b.dataset.key = keyOf(it.res);
+      b.setAttribute('aria-pressed', String(b.dataset.key === selectedKey));
+      const svg = el('svg', { viewBox: `-8 -8 ${S.w + 16} ${S.h + 16}`, role: 'img', 'aria-label': winName(it.res) });
+      el('rect', { x: 0, y: 0, width: S.w, height: S.h, fill: 'var(--free)', stroke: 'var(--grid)', 'stroke-width': 8 }, svg);
+      const r = rectFor(it.res.l, it.res.s);
+      el('rect', { x: r.x + 14, y: r.y + 14, width: r.w - 28, height: r.h - 28, fill: 'var(--result)', 'fill-opacity': 0.8, rx: 18 }, svg);
+      gridLines(svg, G(), { stroke: 'var(--grid)', 'stroke-width': 5, 'stroke-opacity': 0.5 });
+      b.appendChild(svg);
+      const c = document.createElement('div');
+      c.className = 'cap';
+      c.textContent = winName(it.res);
+      b.appendChild(c);
+      const px = document.createElement('div');
+      px.className = 'px mono';
+      px.textContent = `${Math.round(r.w)}×${Math.round(r.h)} · ${it.n} band${it.n > 1 ? 's' : ''}`;
+      b.appendChild(px);
+      b.addEventListener('click', () => {
+        selectKey(b.dataset.key);
+        document.getElementById('map').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
+      });
+      gridEl.appendChild(b);
+    }
+    box.appendChild(gridEl);
+    cat.appendChild(box);
+  }
+}
+function selectMini(key) {
+  document.querySelectorAll('.mini').forEach(b => b.setAttribute('aria-pressed', b.dataset.key === key ? 'true' : 'false'));
+}
+
+function render(resetSelection) {
+  document.getElementById('btn-landscape').setAttribute('aria-pressed', orient === 'landscape');
+  document.getElementById('btn-portrait').setAttribute('aria-pressed', orient === 'portrait');
+  document.getElementById('btn-ws0').setAttribute('aria-pressed', ws === 0);
+  document.getElementById('btn-ws1').setAttribute('aria-pressed', ws === 1);
+  document.getElementById('monitor-note').textContent = SCREENS[orient].note;
+  drawDemo();
+  if (resetSelection) selectedKey = null;
+  drawMap(true);
+  drawLegend();
+  drawRules();
+  drawCatalogue();
+  if (!selectedKey) selectZone(zones.findIndex(z => z.L.kind === 'line' && z.L.i === 1 && z.S.kind === 'line'));
+}
+function switchTo(o, w) {
+  const changedMonitor = o !== orient;
+  orient = o; ws = w;
+  document.getElementById('d-card').classList.remove('blocked');
+  document.getElementById('d-title').textContent = `${orient === 'landscape' ? 'Landscape' : 'Portrait'} monitor, workspace ${ws + 1}`;
+  document.getElementById('d-detail').textContent = 'This monitor and workspace have their own grid. Lines you moved elsewhere stay where you left them.';
+  render(changedMonitor);
+}
+document.getElementById('btn-landscape').addEventListener('click', () => switchTo('landscape', ws));
+document.getElementById('btn-portrait').addEventListener('click', () => switchTo('portrait', ws));
+document.getElementById('btn-ws0').addEventListener('click', () => switchTo(orient, 0));
+document.getElementById('btn-ws1').addEventListener('click', () => switchTo(orient, 1));
+paintKeys();
+render(true);
+</script>

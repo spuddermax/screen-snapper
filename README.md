@@ -3,6 +3,12 @@
 A Cinnamon extension (tested on Cinnamon 6.6, X11) that replaces Cinnamon's
 edge tiling with an eighths snapping grid.
 
+**Try it in a browser first:** [`docs/demo.html`](docs/demo.html) is an
+interactive model of the grid. Drag window edges with Ctrl and Shift, switch
+monitors and workspaces, and hover any drop band to see the window it gives.
+Download it and open it locally; it needs no install. The screenshots below
+come from it.
+
 ## Snapping grid
 
 Each monitor's usable area (inside the panels) is split into eighths:
@@ -29,6 +35,11 @@ Letting go of Ctrl before you drop cancels the snap.
 
 Together these reach all 30 rectangles the grid allows.
 
+![Drop zone map: colored bands along every grid line and screen edge. The
+pointer is on the crossing of the first column line and the middle line, and
+the dashed outline shows the window covering columns 1–2 in both
+rows.](docs/images/drop-map.png)
+
 Cinnamon's own edge tiling is turned off while the extension is enabled and
 turned back on when you disable it. Super+arrow keyboard tiling still works.
 
@@ -38,11 +49,19 @@ Once windows are snapped into the grid, **Ctrl+drag** the edge they share
 and that grid line moves across the whole monitor. Every grid window with an
 edge on it resizes live, and later snaps use the moved line.
 
+![Ctrl-dragging Editor's right edge moves the line between columns 2 and 3
+from 960 to 1180 px. Browser and Files, which share that line, shrink to
+match.](docs/images/move-line.png)
+
 - **Ctrl+Shift** while dragging makes the line jump to the even-eighths
   positions, so it's easy to put back exactly.
 - A line stops 200 px from its neighbours. If the next line is hidden inside
   a window, the drag carries on smoothly with that line instead, so an edge
   can pass it. It won't do that if a window would be squeezed to nothing.
+
+  ![Dragging Editor's edge further left carries on past the hidden line
+  between columns 1 and 2: Editor ends up 330 px wide and Browser and Files
+  stretch across columns 2–3.](docs/images/hand-off.png)
 - **Ctrl+drag on an edge at the screen edge** does nothing.
 - **Without Ctrl**, dragging an edge resizes just that window as usual, and
   it leaves the grid: it won't follow line moves until you Ctrl-snap it again.
