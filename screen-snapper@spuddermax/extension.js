@@ -706,6 +706,40 @@ class DottedGrid {
     }
 }
 
+// During Muffin's own resize of an off-grid window: show the dotted grid
+// lines of the window's monitor while Ctrl is held.
+class GridLinesWhileCtrl {
+    constructor(win) {
+        const ws = win.get_workspace() || activeWorkspace();
+        this.grid = gridFor(win.get_monitor(), ws.index());
+        this.dots = new DottedGrid(this.grid);
+        this.timer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, POLL_MS, () => {
+            this._tick();
+            return GLib.SOURCE_CONTINUE;
+        });
+        this._tick();
+    }
+
+    _tick() {
+        const [, , mods] = global.get_pointer();
+        this.dots.update(this.grid, keysHeld(mods).ctrl);
+    }
+
+    finish() {
+        this.destroy();
+        return null;
+    }
+
+    destroy() {
+        if (this.timer)
+            GLib.source_remove(this.timer);
+        this.timer = 0;
+        if (this.dots)
+            this.dots.destroy();
+        this.dots = null;
+    }
+}
+
 // One edge (or corner) drag on a grid window. Muffin's own resize is ended
 // and the drag is run here, under a modal grab, so every grid window can be
 // placed exactly. Each update starts again from the layout at the start of
@@ -1470,14 +1504,17 @@ function onGrabBegin(...args) {
         adoptWindows(monitor, wsIndex, gridFor(monitor, wsIndex));
     }
     const info = tracked.get(win);
-    if (!info)
-        return;   // not a grid window: Muffin resizes it as usual
-    if (RESIZE_SIDES.has(op) && isOnGrid(win, info, gridFor(info.monitor, info.ws))) {
+    if (info && RESIZE_SIDES.has(op) && isOnGrid(win, info, gridFor(info.monitor, info.ws))) {
         const s = new ResizeSession(win, op, info);
         session = s.done ? null : s;
-    } else if (RESIZE_SIDES.has(op) || isKeyboardResizeOp(op)) {
-        untrack(win);   // resized some other way: off the grid
+        return;
     }
+    if (info && (RESIZE_SIDES.has(op) || isKeyboardResizeOp(op)))
+        untrack(win);   // resized some other way: off the grid
+    // Not a grid window: Muffin resizes it as usual, and we only show the
+    // grid lines while Ctrl is held.
+    if (RESIZE_SIDES.has(op))
+        session = new GridLinesWhileCtrl(win);
 }
 
 function onGrabEnd() {
