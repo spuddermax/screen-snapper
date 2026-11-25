@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/images/mascot.svg" width="200" alt="The Screen Snapper mascot: a snapping turtle whose shell is the 4 by 2 grid, with one cell snapped in orange"></p>
+
 # Screen Snapper
 
 A Cinnamon extension (tested on Cinnamon 6.6, X11) that replaces Cinnamon's

@@ -4,7 +4,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Screen Snapper</title>
 <meta name="description" content="A Cinnamon extension that snaps windows to an eighths grid with Ctrl-drag, and lets you resize the grid by Ctrl-dragging the edges windows share. Try it live in your browser.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='3' y='9' width='58' height='46' rx='7' fill='%23ffffff' stroke='%2318212c' stroke-width='5'/%3E%3Crect x='9' y='15' width='32' height='34' rx='3' fill='%23e8741c'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20viewBox%3D%220%200%20128%2084%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cdefs%3E%3CclipPath%20id%3D%22f-shell%22%3E%3Cpath%20d%3D%22M18%2056%20C22%2014%2090%2012%2098%2056%20Z%22/%3E%3C/clipPath%3E%3C/defs%3E%3Cpath%20d%3D%22M17%2058%20L4%2065%20L18%2063%20Z%22%20fill%3D%22%23a9bf84%22%20stroke%3D%22%231f2b1c%22%20stroke-width%3D%222%22%20stroke-linejoin%3D%22round%22/%3E%3Crect%20x%3D%2224%22%20y%3D%2256%22%20width%3D%2214%22%20height%3D%2218%22%20rx%3D%226%22%20fill%3D%22%23a9bf84%22%20stroke%3D%22%231f2b1c%22%20stroke-width%3D%222.5%22/%3E%3Crect%20x%3D%2276%22%20y%3D%2256%22%20width%3D%2214%22%20height%3D%2218%22%20rx%3D%226%22%20fill%3D%22%23a9bf84%22%20stroke%3D%22%231f2b1c%22%20stroke-width%3D%222.5%22/%3E%3Crect%20x%3D%2290%22%20y%3D%2242%22%20width%3D%2218%22%20height%3D%2215%22%20rx%3D%227%22%20fill%3D%22%23a9bf84%22%20stroke%3D%22%231f2b1c%22%20stroke-width%3D%222.5%22/%3E%3Cpath%20d%3D%22M103%2047%20L123%2043%20L121%2053%20Z%22%20fill%3D%22%239c3b2b%22/%3E%3Cpath%20d%3D%22M101%2049%20L110%2047%20L121%2050%20Q118%2058%20105%2058%20Q100%2056%20101%2049%20Z%22%20fill%3D%22%23a9bf84%22%20stroke%3D%22%231f2b1c%22%20stroke-width%3D%222.5%22%20stroke-linejoin%3D%22round%22%20transform%3D%22rotate%2812%20101%2049%29%22%3E%3C/path%3E%3Cpath%20d%3D%22M99%2048%20Q99%2033%20111%2031%20Q122%2030%20124%2038%20Q125%2044%20121%2047%20L119%2044%20L110%2046%20L101%2050%20Z%22%20fill%3D%22%23a9bf84%22%20stroke%3D%22%231f2b1c%22%20stroke-width%3D%222.5%22%20stroke-linejoin%3D%22round%22/%3E%3Ccircle%20cx%3D%22112%22%20cy%3D%2238%22%20r%3D%222.8%22%20fill%3D%22%231f2b1c%22/%3E%3Ccircle%20cx%3D%22113%22%20cy%3D%2237%22%20r%3D%220.9%22%20fill%3D%22%23fff%22/%3E%3Cpath%20d%3D%22M18%2056%20C22%2014%2090%2012%2098%2056%20Z%22%20fill%3D%22%238fae6a%22/%3E%3Cg%20clip-path%3D%22url%28%23f-shell%29%22%3E%3Crect%20x%3D%2218%22%20y%3D%2210%22%20width%3D%2240%22%20height%3D%2230%22%20fill%3D%22%23e8741c%22/%3E%3Cpath%20d%3D%22M38%2010%20V60%20M58%2010%20V60%20M78%2010%20V60%20M10%2040%20H104%22%20stroke%3D%22%231f2b1c%22%20stroke-width%3D%222.5%22/%3E%3C/g%3E%3Cpath%20d%3D%22M18%2056%20C22%2014%2090%2012%2098%2056%20Z%22%20fill%3D%22none%22%20stroke%3D%22%231f2b1c%22%20stroke-width%3D%223%22%20stroke-linejoin%3D%22round%22/%3E%3Crect%20x%3D%2213%22%20y%3D%2254%22%20width%3D%2290%22%20height%3D%227%22%20rx%3D%223.5%22%20fill%3D%22%231f2b1c%22/%3E%3C/svg%3E">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600&display=swap">
@@ -28,6 +28,10 @@
   --result: #e8741c;
   --blocked: #c23a3a;
   --hero-bg: #e9eef3;
+  --shell: #8fae6a;
+  --shell-ink: #1f2b1c;
+  --skin: #a9bf84;
+  --mouth: #9c3b2b;
   --on-accent: #1d1206;
   --font-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
   --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -37,13 +41,13 @@
   :root:not([data-theme="light"]) {
     --bg: #11161d; --panel: #18202a; --fg: #e3e9f0; --muted: #96a3b3; --line: #2c3845;
     --grid: #aab8c8; --free: #1d2631; --win: #243040; --win-bar: #2f3d50; --touch: #5b95f2; --corner: #a984ec;
-    --edge: #2bbcaa; --strip: #95bb3a; --max: #ee6b9b; --result: #ff9640; --blocked: #f06464; --hero-bg: #172029; --on-accent: #1d1206; color-scheme: dark;
+    --edge: #2bbcaa; --strip: #95bb3a; --max: #ee6b9b; --result: #ff9640; --blocked: #f06464; --hero-bg: #172029; --shell: #6f8f50; --shell-ink: #0c120b; --skin: #8ea86b; --mouth: #b4503c; --on-accent: #1d1206; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #11161d; --panel: #18202a; --fg: #e3e9f0; --muted: #96a3b3; --line: #2c3845;
   --grid: #aab8c8; --free: #1d2631; --win: #243040; --win-bar: #2f3d50; --touch: #5b95f2; --corner: #a984ec;
-  --edge: #2bbcaa; --strip: #95bb3a; --max: #ee6b9b; --result: #ff9640; --blocked: #f06464; --hero-bg: #172029; --on-accent: #1d1206; color-scheme: dark;
+  --edge: #2bbcaa; --strip: #95bb3a; --max: #ee6b9b; --result: #ff9640; --blocked: #f06464; --hero-bg: #172029; --shell: #6f8f50; --shell-ink: #0c120b; --skin: #8ea86b; --mouth: #b4503c; --on-accent: #1d1206; color-scheme: dark;
 }
 *, *::before, *::after { box-sizing: border-box; }
 body {
@@ -171,7 +175,7 @@ table.rules { border-collapse: collapse; width: 100%; font-size: 14px; }
 .hero-in { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 40px; }
 .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .brand { display: inline-flex; align-items: center; gap: 10px; font: 600 1.25rem var(--font-display); letter-spacing: .01em; color: var(--fg); text-decoration: none; }
-.logo { width: 38px; height: 38px; color: var(--fg); flex: none; }
+.logo { width: 52px; height: 34px; flex: none; }
 .toplinks { display: flex; gap: 18px; font-size: 14px; }
 .toplinks a { color: var(--muted); text-decoration: none; }
 .toplinks a:hover { color: var(--fg); }
@@ -187,8 +191,12 @@ table.rules { border-collapse: collapse; width: 100%; font-size: 14px; }
 .btn-ghost { color: var(--fg); border: 1px solid var(--line); background: var(--panel); }
 .btn-primary:focus-visible, .btn-ghost:focus-visible, .toplinks a:focus-visible, .copy:focus-visible { outline: 3px solid var(--fg); outline-offset: 3px; }
 .meta { margin-top: 18px; font-size: 13px; color: var(--muted); }
-.hero-art { margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; box-shadow: 0 24px 48px -32px rgba(20, 30, 45, .45); }
-.hero-art svg { display: block; width: 100%; height: auto; }
+.hero-art { position: relative; margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; box-shadow: 0 24px 48px -32px rgba(20, 30, 45, .45); }
+.hero-art > svg:not(.mascot) { display: block; width: 100%; height: auto; }
+/* The mascot perches on the demo screen's top edge and snaps when the line lands. */
+.hero-art > .mascot { position: absolute; width: clamp(96px, 22%, 136px); height: auto; right: 22px; top: 0; transform: translateY(-62%); filter: drop-shadow(0 6px 8px rgba(20, 30, 20, .18)); }
+.hero-art { margin-top: 44px; }
+@media (max-width: 860px) { .hero-art { margin-top: 56px; } }
 .hero-art figcaption { margin-top: 10px; font-size: 13px; line-height: 1.6; color: var(--muted); }
 code { font: .92em var(--font-mono); }
 kbd { font: 500 12px var(--font-mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 1px 7px; background: var(--panel); color: var(--fg); white-space: nowrap; }
@@ -214,6 +222,8 @@ kbd { font: 500 12px var(--font-mono); border: 1px solid var(--line); border-bot
 .install a { color: var(--fg); }
 .footer { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 22px; color: var(--muted); font-size: 13px; display: flex; flex-wrap: wrap; gap: 8px 22px; }
 .footer a { color: var(--muted); }
+.foot-brand { display: inline-flex; align-items: center; gap: 8px; }
+.foot-turtle { width: 30px; height: 20px; }
 @media (prefers-reduced-motion: reduce) { .live .dot { animation: none; } html { scroll-behavior: auto; } }
 html { scroll-behavior: smooth; }
 </style>
@@ -221,7 +231,7 @@ html { scroll-behavior: smooth; }
 <header class="hero">
   <div class="hero-in gutter">
     <div class="topbar">
-      <a class="brand" href="#top" id="top"><svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><rect x="3" y="9" width="58" height="46" rx="7" fill="none" stroke="currentColor" stroke-width="4"/><path d="M17.5 9v46M32 9v46M46.5 9v46M3 32h58" stroke="currentColor" stroke-width="2" opacity=".45"/><rect x="8" y="14" width="34" height="36" rx="3" fill="var(--result)"/></svg>Screen Snapper</a>
+      <a class="brand" href="#top" id="top"><svg viewBox="0 0 128 84" class="logo" aria-hidden="true"><defs><clipPath id="logo-shell"><path d="M18 56 C22 14 90 12 98 56 Z"/></clipPath></defs><path d="M17 58 L4 65 L18 63 Z" fill="var(--skin)" stroke="var(--shell-ink)" stroke-width="2" stroke-linejoin="round"/><rect x="24" y="56" width="14" height="18" rx="6" fill="var(--skin)" stroke="var(--shell-ink)" stroke-width="2.5"/><rect x="76" y="56" width="14" height="18" rx="6" fill="var(--skin)" stroke="var(--shell-ink)" stroke-width="2.5"/><rect x="90" y="42" width="18" height="15" rx="7" fill="var(--skin)" stroke="var(--shell-ink)" stroke-width="2.5"/><path d="M103 47 L123 43 L121 53 Z" fill="var(--mouth)"/><path d="M101 49 L110 47 L121 50 Q118 58 105 58 Q100 56 101 49 Z" fill="var(--skin)" stroke="var(--shell-ink)" stroke-width="2.5" stroke-linejoin="round" transform="rotate(12 101 49)"></path><path d="M99 48 Q99 33 111 31 Q122 30 124 38 Q125 44 121 47 L119 44 L110 46 L101 50 Z" fill="var(--skin)" stroke="var(--shell-ink)" stroke-width="2.5" stroke-linejoin="round"/><circle cx="112" cy="38" r="2.8" fill="var(--shell-ink)"/><circle cx="113" cy="37" r="0.9" fill="#fff"/><path d="M18 56 C22 14 90 12 98 56 Z" fill="var(--shell)"/><g clip-path="url(#logo-shell)"><rect x="18" y="10" width="40" height="30" fill="var(--result)"/><path d="M38 10 V60 M58 10 V60 M78 10 V60 M10 40 H104" stroke="var(--shell-ink)" stroke-width="2.5"/></g><path d="M18 56 C22 14 90 12 98 56 Z" fill="none" stroke="var(--shell-ink)" stroke-width="3" stroke-linejoin="round"/><rect x="13" y="54" width="90" height="7" rx="3.5" fill="var(--shell-ink)"/></svg>Screen Snapper</a>
       <nav class="toplinks" aria-label="Page">
         <a href="#try">Demo</a>
         <a href="#install">Install</a>
@@ -240,6 +250,7 @@ html { scroll-behavior: smooth; }
         <p class="meta">Free and open source (MIT) · Cinnamon 6.0 to 6.6 on X11</p>
       </div>
       <figure class="hero-art">
+        <svg viewBox="0 0 128 84" class="mascot" id="mascot" role="img" aria-label="The Screen Snapper mascot: a snapping turtle whose shell is the 4 by 2 grid, with one cell snapped in orange"><defs><clipPath id="mascot-shell"><path d="M18 56 C22 14 90 12 98 56 Z"/></clipPath></defs><path d="M17 58 L4 65 L18 63 Z" fill="var(--skin)" stroke="var(--shell-ink)" stroke-width="2" stroke-linejoin="round"/><rect x="24" y="56" width="14" height="18" rx="6" fill="var(--skin)" stroke="var(--shell-ink)" stroke-width="2.5"/><rect x="76" y="56" width="14" height="18" rx="6" fill="var(--skin)" stroke="var(--shell-ink)" stroke-width="2.5"/><rect x="90" y="42" width="18" height="15" rx="7" fill="var(--skin)" stroke="var(--shell-ink)" stroke-width="2.5"/><path d="M103 47 L123 43 L121 53 Z" fill="var(--mouth)"/><path d="M101 49 L110 47 L121 50 Q118 58 105 58 Q100 56 101 49 Z" fill="var(--skin)" stroke="var(--shell-ink)" stroke-width="2.5" stroke-linejoin="round" transform="rotate(12 101 49)"><animateTransform attributeName="transform" type="rotate" dur="6s" repeatCount="indefinite" values="12 101 49;12 101 49;20 101 49;-2 101 49;12 101 49;12 101 49" keyTimes="0;.38;.47;.5;.6;1"/></path><path d="M99 48 Q99 33 111 31 Q122 30 124 38 Q125 44 121 47 L119 44 L110 46 L101 50 Z" fill="var(--skin)" stroke="var(--shell-ink)" stroke-width="2.5" stroke-linejoin="round"/><circle cx="112" cy="38" r="2.8" fill="var(--shell-ink)"/><circle cx="113" cy="37" r="0.9" fill="#fff"/><path d="M18 56 C22 14 90 12 98 56 Z" fill="var(--shell)"/><g clip-path="url(#mascot-shell)"><rect x="18" y="10" width="40" height="30" fill="var(--result)"/><path d="M38 10 V60 M58 10 V60 M78 10 V60 M10 40 H104" stroke="var(--shell-ink)" stroke-width="2.5"/></g><path d="M18 56 C22 14 90 12 98 56 Z" fill="none" stroke="var(--shell-ink)" stroke-width="3" stroke-linejoin="round"/><rect x="13" y="54" width="90" height="7" rx="3.5" fill="var(--shell-ink)"/></svg>
         <svg id="hero-svg" viewBox="0 0 480 270" role="img" aria-label="Animation: three windows on a 4 by 2 grid. The line between columns 2 and 3 slides right and back, and the windows on either side resize with it.">
           <rect x="1" y="1" width="478" height="268" rx="6" fill="var(--free)" stroke="var(--grid)" stroke-width="2"/>
           <path d="M120 2v266M240 2v266M360 2v266M2 135h476" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="6 5" opacity=".55"/>
@@ -465,7 +476,7 @@ cd screen-snapper
   </section>
 
   <footer class="footer">
-    <span>Screen Snapper · MIT license</span>
+    <span class="foot-brand"><svg viewBox="0 0 128 84" class="foot-turtle" aria-hidden="true"><defs><clipPath id="foot-shell"><path d="M18 56 C22 14 90 12 98 56 Z"/></clipPath></defs><path d="M17 58 L4 65 L18 63 Z" fill="var(--skin)" stroke="var(--shell-ink)" stroke-width="2" stroke-linejoin="round"/><rect x="24" y="56" width="14" height="18" rx="6" fill="var(--skin)" stroke="var(--shell-ink)" stroke-width="2.5"/><rect x="76" y="56" width="14" height="18" rx="6" fill="var(--skin)" stroke="var(--shell-ink)" stroke-width="2.5"/><rect x="90" y="42" width="18" height="15" rx="7" fill="var(--skin)" stroke="var(--shell-ink)" stroke-width="2.5"/><path d="M103 47 L123 43 L121 53 Z" fill="var(--mouth)"/><path d="M101 49 L110 47 L121 50 Q118 58 105 58 Q100 56 101 49 Z" fill="var(--skin)" stroke="var(--shell-ink)" stroke-width="2.5" stroke-linejoin="round" transform="rotate(12 101 49)"></path><path d="M99 48 Q99 33 111 31 Q122 30 124 38 Q125 44 121 47 L119 44 L110 46 L101 50 Z" fill="var(--skin)" stroke="var(--shell-ink)" stroke-width="2.5" stroke-linejoin="round"/><circle cx="112" cy="38" r="2.8" fill="var(--shell-ink)"/><circle cx="113" cy="37" r="0.9" fill="#fff"/><path d="M18 56 C22 14 90 12 98 56 Z" fill="var(--shell)"/><g clip-path="url(#foot-shell)"><rect x="18" y="10" width="40" height="30" fill="var(--result)"/><path d="M38 10 V60 M58 10 V60 M78 10 V60 M10 40 H104" stroke="var(--shell-ink)" stroke-width="2.5"/></g><path d="M18 56 C22 14 90 12 98 56 Z" fill="none" stroke="var(--shell-ink)" stroke-width="3" stroke-linejoin="round"/><rect x="13" y="54" width="90" height="7" rx="3.5" fill="var(--shell-ink)"/></svg>Screen Snapper · MIT license</span>
     <a href="https://github.com/spuddermax/screen-snapper">Source on GitHub</a>
     <a href="https://github.com/spuddermax/screen-snapper/issues">Report a problem</a>
   </footer>
@@ -1231,6 +1242,8 @@ render(true);
 if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
   const hs = document.getElementById('hero-svg');
   if (hs && hs.pauseAnimations) hs.pauseAnimations();
+  const ms = document.getElementById('mascot');
+  if (ms && ms.pauseAnimations) ms.pauseAnimations();
 }
 document.getElementById('copy-install').addEventListener('click', async e => {
   const b = e.currentTarget, text = document.getElementById('install-cmd').textContent;
