@@ -75,6 +75,11 @@ header { display: flex; flex-direction: column; gap: 14px; }
   border-radius: 8px; padding: 8px 14px; cursor: pointer;
 }
 .btn:disabled { opacity: .45; cursor: default; }
+.btn-accent { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; background: var(--result); color: var(--on-accent); border-color: transparent; box-shadow: 0 1px 0 rgba(0,0,0,.15), 0 6px 18px -8px var(--result); }
+.btn-accent:not(:disabled):hover { filter: brightness(1.06); }
+.btn-accent:disabled { box-shadow: none; }
+.btn-accent svg { width: 16px; height: 16px; flex: none; }
+.btn.btn-accent:focus-visible { outline-color: var(--fg); }
 .key {
   font: 500 13px var(--font-mono); color: var(--fg); background: var(--panel); border: 1px solid var(--line);
   border-bottom-width: 3px; border-radius: 7px; padding: 5px 12px; cursor: pointer; min-width: 64px;
@@ -329,7 +334,7 @@ html { scroll-behavior: smooth; }
           <div class="card">
             <div class="eyebrow" id="d-wins-h">Windows</div>
             <table class="wins mono"><tbody id="d-wins"></tbody></table>
-            <button class="btn" id="d-reset" type="button">Reset this workspace's grid</button>
+            <button class="btn btn-accent" id="d-reset" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>Reset this workspace's grid</button>
             <span class="hint">On the desktop, <kbd>Super</kbd> + <kbd>Ctrl</kbd> + <kbd>G</kbd> does this for the monitor under the pointer.</span>
           </div>
         </div>
