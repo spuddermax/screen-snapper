@@ -17,7 +17,9 @@
 //    inside a window, the drag carries on with that line (see moveLine()).
 //    Ctrl+drag on an outer edge takes over a grid line inside the window,
 //    or does nothing if there is none. Without Ctrl, the edge resizes
-//    just that window and it leaves the grid. Keys are checked the whole
+//    just that window and it leaves the grid; pressing Ctrl once the edge
+//    has left its line's band snaps the edge to the next line or screen edge
+//    and puts the window back on the grid. Keys are checked the whole
 //    drag. Each monitor and workspace keeps its own grid, saved to disk;
 //    Super+Ctrl+G resets the one under the pointer.
 //
@@ -651,6 +653,7 @@ class ResizeSession {
         [this.startX, this.startY] = global.get_pointer();
         this.applied = new Map(this.members.map(w => [w, rectOf(w.get_frame_rect())]));
         this.result = null;
+        this.ctrlMode = null;   // what Ctrl does this drag: 'line' or 'snap'
         this.done = false;
 
         const time = global.display.get_current_time_roundtrip();
@@ -771,86 +774,140 @@ class ResizeSession {
         });
     }
 
+    // The window's rect if each dragged side just followed the pointer.
+    _plainRect(px, py) {
+        const r = { ...this.startRect };
+        for (const side of this.sides) {
+            const delta = side === 'left' || side === 'right' ? px - this.startX : py - this.startY;
+            if (side === 'left') {
+                const right = r.x + r.width;
+                r.x = Math.min(this.startRect.x + delta, right - 1);
+                r.width = right - r.x;
+            } else if (side === 'right') {
+                r.width = Math.max(this.startRect.width + delta, 1);
+            } else if (side === 'top') {
+                const bottom = r.y + r.height;
+                r.y = Math.min(this.startRect.y + delta, bottom - 1);
+                r.height = bottom - r.y;
+            } else {
+                r.height = Math.max(this.startRect.height + delta, 1);
+            }
+        }
+        return r;
+    }
+
+    // Where a side sits along its axis, as an offset into the work area:
+    // { axis, key, start, at } for rect r.
+    _sideAt(r, side) {
+        const W = this.grid0.W;
+        const land = isLandscape(W);
+        const horiz = side === 'left' || side === 'right';
+        const axis = horiz === land ? 'long' : 'short';
+        const start = side === 'left' || side === 'top';
+        const edge = side === 'left' ? r.x : side === 'right' ? r.x + r.width
+            : side === 'top' ? r.y : r.y + r.height;
+        return { axis, key: axis === 'long' ? 'l' : 's', start, at: edge - (horiz ? W.x : W.y) };
+    }
+
+    // When Ctrl goes down mid-drag: if every dragged side is still within
+    // BAND of the line (or screen edge) it started on, Ctrl moves lines;
+    // otherwise it snaps the sides to whatever line or edge they reach.
+    _ctrlMode(px, py) {
+        const r = this._plainRect(px, py);
+        const near = this.sides.every(side => {
+            const now = this._sideAt(r, side);
+            const was = this._sideAt(this.startRect, side);
+            return Math.abs(now.at - was.at) <= scaled(BAND);
+        });
+        return near ? 'line' : 'snap';
+    }
+
     // pointer: [x, y, mods], or omitted to read them now.
     _update(pointer) {
         if (this.done)
             return;
         const [px, py, mods] = pointer || global.get_pointer();
         const { ctrl, shift } = keysHeld(mods);
+        // What Ctrl does is decided when it goes down, and kept until it is
+        // released.
+        if (!ctrl)
+            this.ctrlMode = null;
+        else if (!this.ctrlMode)
+            this.ctrlMode = this._ctrlMode(px, py);
         const grid = { W: this.grid0.W, long: [...this.grid0.long], short: [...this.grid0.short] };
         const spans = new Map([...this.spans0].map(([w, sp]) => [w, { l: [...sp.l], s: [...sp.s] }]));
         const mine = spans.get(this.window);
         if (!mine)
             return;
-        let plain = null;
-        // A side that came off the screen edge but isn't yet far enough in to
-        // take over a grid line: [side, offset from the work area start].
-        const loose = [];
 
-        for (const side of this.sides) {
-            const delta = side === 'left' || side === 'right' ? px - this.startX : py - this.startY;
-            if (ctrl) {
-                const line = sideLine(grid.W, mine, side);
-                if (line === 'outer') {
-                    // The side is on the screen edge. It can only move inward
-                    // onto a grid line inside the window; otherwise
-                    // Ctrl+drag on an outer edge does nothing.
-                    const o = outerLine(grid.W, mine, side);
-                    if (!o)
-                        continue;
-                    const len = positions(grid, o.axis)[o.key === 'l' ? 4 : 2];
-                    const at = (o.start ? 0 : len) + delta;
-                    const inward = o.start ? at : len - at;
-                    if (inward < scaled(MIN_CELL)) {
-                        // Too close to the screen edge for a grid line: the side
-                        // follows the pointer, and goes back if released here.
-                        loose.push([side, Math.min(Math.max(at, 0), len)]);
-                        continue;
-                    }
-                    mine[o.key][o.start ? 0 : 1] = o.start ? o.j + 1 : o.j;
-                    moveLine(grid, [...spans.values()], o.axis, o.j - 1, at, shift);
-                    continue;
-                }
-                const t = grid[line.axis][line.idx] + delta;
-                moveLine(grid, [...spans.values()], line.axis, line.idx, t, shift);
-            } else {
-                plain = plain || { ...this.startRect };
-                const r = plain;
-                if (side === 'left') {
-                    const right = r.x + r.width;
-                    r.x = Math.min(this.startRect.x + delta, right - 1);
-                    r.width = right - r.x;
-                } else if (side === 'right') {
-                    r.width = Math.max(this.startRect.width + delta, 1);
-                } else if (side === 'top') {
-                    const bottom = r.y + r.height;
-                    r.y = Math.min(this.startRect.y + delta, bottom - 1);
-                    r.height = bottom - r.y;
-                } else {
-                    r.height = Math.max(this.startRect.height + delta, 1);
-                }
-            }
-        }
-
-        if (ctrl) {
-            for (const w of this.members) {
-                const r = gridRect(grid, spans.get(w));
-                if (w === this.window) {
-                    for (const [side, at] of loose)
-                        this._looseSide(r, grid.W, side, at);
-                }
-                this._place(w, r);
-            }
-        } else {
-            // Others go back to where they were; just this window resizes.
+        if (!ctrl || this.ctrlMode === 'snap') {
+            // Others stay where they were; only this window changes.
             for (const w of this.members) {
                 if (w !== this.window)
                     this._place(w, gridRect(this.grid0, this.spans0.get(w)));
             }
-            this._place(this.window, plain || this.startRect);
+            const plain = this._plainRect(px, py);
+            let onGrid = false;
+            if (ctrl) {
+                // Snap each side to the line or screen edge whose band it is
+                // in. The window is back on the grid once every side has one.
+                onGrid = this.sides.every(side => {
+                    const { axis, key, start, at } = this._sideAt(plain, side);
+                    const p = positions(grid, axis);
+                    const k = p.findIndex(v => Math.abs(v - at) <= scaled(BAND));
+                    if (k < 0)
+                        return false;
+                    const span = mine[key];
+                    if (start ? k + 1 > span[1] : k < span[0])
+                        return false;   // would turn the window inside out
+                    span[start ? 0 : 1] = start ? k + 1 : k;
+                    return true;
+                });
+            }
+            this._place(this.window, onGrid ? gridRect(grid, mine) : plain);
+            this.result = { mode: onGrid ? 'snap' : 'plain', grid, spans };
+            return;
         }
-        this.result = { ctrl, grid, spans };
 
+        // Ctrl moves lines.
+        // A side that came off the screen edge but isn't yet far enough in to
+        // take over a grid line: [side, offset from the work area start].
+        const loose = [];
+        for (const side of this.sides) {
+            const delta = side === 'left' || side === 'right' ? px - this.startX : py - this.startY;
+            const line = sideLine(grid.W, mine, side);
+            if (line === 'outer') {
+                // The side is on the screen edge. It can only move inward
+                // onto a grid line inside the window; otherwise Ctrl+drag on
+                // an outer edge does nothing.
+                const o = outerLine(grid.W, mine, side);
+                if (!o)
+                    continue;
+                const len = positions(grid, o.axis)[o.key === 'l' ? 4 : 2];
+                const at = (o.start ? 0 : len) + delta;
+                const inward = o.start ? at : len - at;
+                if (inward < scaled(MIN_CELL)) {
+                    // Too close to the screen edge for a grid line: the side
+                    // follows the pointer, and goes back if released here.
+                    loose.push([side, Math.min(Math.max(at, 0), len)]);
+                    continue;
+                }
+                mine[o.key][o.start ? 0 : 1] = o.start ? o.j + 1 : o.j;
+                moveLine(grid, [...spans.values()], o.axis, o.j - 1, at, shift);
+                continue;
+            }
+            const t = grid[line.axis][line.idx] + delta;
+            moveLine(grid, [...spans.values()], line.axis, line.idx, t, shift);
+        }
+        for (const w of this.members) {
+            const r = gridRect(grid, spans.get(w));
+            if (w === this.window) {
+                for (const [side, at] of loose)
+                    this._looseSide(r, grid.W, side, at);
+            }
+            this._place(w, r);
+        }
+        this.result = { mode: 'line', grid, spans };
     }
 
     // Move one side of rect r to `at` (an offset into the work area W), keeping
@@ -900,12 +957,16 @@ class ResizeSession {
                 this._place(w, w === this.window ? this.startRect : gridRect(this.grid0, this.spans0.get(w)));
             return;
         }
-        if (this.result.ctrl) {
+        if (this.result.mode === 'line') {
             for (const [w, sp] of this.result.spans)
                 this._place(w, gridRect(this.result.grid, sp));
             saveGrid(this.monitor, this.wsIndex, this.result.grid);
             for (const [w, sp] of this.result.spans)
                 track(w, this.monitor, this.wsIndex, sp.l, sp.s);
+        } else if (this.result.mode === 'snap') {
+            // Snapped back onto the grid with new cells; no line moved.
+            const sp = this.result.spans.get(this.window);
+            track(this.window, this.monitor, this.wsIndex, sp.l, sp.s);
         } else {
             untrack(this.window);   // resized by hand: off the grid now
         }

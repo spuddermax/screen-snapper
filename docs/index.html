@@ -374,7 +374,7 @@ html { scroll-behavior: smooth; }
         <li><span class="do">Drag with no keys</span><span>Only that window resizes, and it leaves the grid.</span></li>
         <li><span class="do"><kbd>Ctrl</kbd> + drag Editor's left edge right</span><span>It leaves the screen edge and takes over the hidden line once it is 200 px in. Grey grips have no line inside their window, so they stay put.</span></li>
         <li><span class="do"><kbd>Ctrl</kbd> + drag Editor's right edge far left</span><span>It glides past the hidden line, and Editor ends up one column wide.</span></li>
-        <li><span class="do">Press or release <kbd>Ctrl</kbd> mid-drag</span><span>Switches between moving the line and resizing one window.</span></li>
+        <li><span class="do">Drag past the line, then press <kbd>Ctrl</kbd></span><span>The edge snaps to the next line or screen edge it reaches, and the window rejoins the grid. Try Browser's right edge after Terminal's top edge has moved down.</span></li>
       </ul>
     </div>
   </section>
@@ -424,6 +424,7 @@ html { scroll-behavior: smooth; }
         <tbody>
           <tr><td class="k">none</td><td>Resizes only that window, as usual. The window leaves the grid and stops following line moves.</td><td>Resizes only that window and it leaves the grid.</td></tr>
           <tr><td class="k">Ctrl</td><td>Moves the grid line across the whole monitor. Every grid window with an edge on it follows, live. The line stops 200 px from its neighbours and the screen edges.</td><td>If a grid line runs through the window, the edge takes it over: it follows the pointer, and once 200 px in, that line moves with it, along with any other window edges on it. Let go sooner and the edge returns. If the window is one cell wide there, nothing moves.</td></tr>
+          <tr><td class="k">Ctrl, pressed late</td><td colspan="2">The edge snaps to the grid line or screen edge whose 50 px band it is in, and the window rejoins the grid covering those cells. No line moves. Release Ctrl and it is a plain resize again.</td></tr>
           <tr><td class="k">Ctrl+Shift</td><td>Same, but the line jumps between the even-eighths positions, so it is easy to put back exactly.</td><td>Same, with the line snapping to even eighths.</td></tr>
         </tbody>
       </table>
@@ -804,6 +805,28 @@ function beginAction(w, side, e) {
   return { kind: 'resize', w, side, wasOnGrid: !w.free };
 }
 
+// Snap one side of w to the grid line or screen edge whose band v is in, and
+// put the window back on the grid with those cells. Otherwise resize freely.
+function snapEdge(w, side, v) {
+  const wasOnGrid = !w.free;
+  if (wasOnGrid) {
+    const land = orient === 'landscape';
+    const horiz = side === 'left' || side === 'right';
+    const axis = horiz === land ? 'long' : 'short', key = axis === 'long' ? 'l' : 's';
+    const start = side === 'left' || side === 'top';
+    const p = posOf(G(), axis), n = p.length - 1;
+    const k = p.findIndex(x => Math.abs(x - v) <= BAND);
+    const span = w[key];
+    if (k >= 0 && (start ? k + 1 <= span[1] : k >= span[0])) {
+      span[start ? 0 : 1] = start ? k + 1 : k;
+      return { kind: 'snap', w, side, axis, k, n };
+    }
+  }
+  const a = { kind: 'resize', w, side, wasOnGrid, seeking: wasOnGrid };
+  resizeAlone(a, v);
+  return a;
+}
+
 function setLineTo(d, v, shift) {
   const p = posOf(G(), d.axis);
   const lo = p[d.idx] + MIN_CELL, hi = p[d.idx + 2] - MIN_CELL;
@@ -889,9 +912,19 @@ function applyDrag(e) {
   const d = drag;
   state[orient][ws] = structuredClone(d.snapshot);
   const w = cur().wins.find(x => x.name === d.name);
-  let action = beginAction(w, d.side, { ctrlKey: ctrlOn(e) });
   const delta = d.vertical ? d.pt.x - d.startPt.x : d.pt.y - d.startPt.y;
+  // Same as the extension: what Ctrl does is decided when it goes down. Near
+  // the edge's own line it moves the line; past that band it snaps the edge.
+  const ctrl = ctrlOn(e);
+  if (!ctrl) d.ctrlMode = null;
+  else if (!d.ctrlMode) d.ctrlMode = Math.abs(delta) <= BAND ? 'line' : 'snap';
+  let action = beginAction(w, d.side, { ctrlKey: ctrl && d.ctrlMode === 'line' });
   looseEdge = null;
+  if (ctrl && d.ctrlMode === 'snap') {
+    const r = winRect(w);
+    const edge = { left: r.x, right: r.x + r.w, top: r.y, bottom: r.y + r.h }[d.side];
+    action = snapEdge(w, d.side, edge + delta);
+  } else
   if (action.kind === 'outer') {
     const len = posOf(G(), action.axis).at(-1);
     const at = (action.start ? 0 : len) + delta;
@@ -923,6 +956,13 @@ function report(d) {
   if (d.kind === 'blocked') {
     t.textContent = 'Blocked: no grid line inside this window';
     det.textContent = 'This edge is on the screen edge, and the window is one cell wide here, so there is no grid line inside it to move onto. Without Ctrl it resizes just that window.';
+  } else if (d.kind === 'snap') {
+    const to = d.k === 0 || d.k === d.n ? 'the screen edge' : lineName(d.axis, d.k - 1).replace(/^The/, 'the');
+    t.textContent = `${d.w.name}'s ${d.side} edge snapped to ${to}`;
+    det.textContent = `Ctrl went down away from the edge's own line, so the edge snaps instead of moving a line. ${d.w.name} is back on the grid: ${winName({ l: d.w.l, s: d.w.s }).toLowerCase()}. No line moved.`;
+  } else if (d.kind === 'resize' && d.seeking) {
+    t.textContent = `${d.w.name}'s edge is looking for a line`;
+    det.textContent = 'Ctrl went down away from the edge\'s own line, so the edge snaps to the next grid line or screen edge it gets within 50 px of. Release Ctrl for a plain resize.';
   } else if (d.kind === 'outer') {
     t.textContent = `${d.w.name}'s edge is off the screen edge`;
     det.textContent = `Keep going: 200 px in, it takes over ${lineName(d.axis, d.j - 1).replace(/^The/, 'the')}. Let go now and it goes back.`;

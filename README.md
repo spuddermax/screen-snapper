@@ -73,9 +73,17 @@ match.](docs/images/move-line.png)
 - **Without Ctrl**, dragging an edge resizes just that window as usual, and
   it leaves the grid: it won't follow line moves until you Ctrl-snap it again.
   Moving a grid window by hand also takes it off the grid.
-- The keys are checked the whole drag. Press Ctrl partway through to switch
-  to moving the line; release it and the line goes back to where it was and
-  the drag becomes a plain resize. **Escape** cancels the drag.
+- The keys are checked the whole drag. What Ctrl does depends on where the
+  edge is when you press it:
+  - **Still near its own line** (within the 50 px band): Ctrl moves the line.
+  - **Dragged out past that band:** Ctrl snaps the edge to the next grid line
+    or screen edge it reaches, and the window rejoins the grid covering
+    those cells. No line moves. For example, after an empty cell opens up
+    beside a window, drag its edge out with no keys, press Ctrl, and carry on
+    to the screen edge.
+
+  Release Ctrl and the drag becomes a plain resize again (a moved line goes
+  back). **Escape** cancels the drag.
 
 Each monitor and each workspace keeps its own grid, saved in
 `~/.config/screen-snapper/grids.json`. **Super+Ctrl+G** puts the grid on the
