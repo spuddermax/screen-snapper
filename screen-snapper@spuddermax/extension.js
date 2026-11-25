@@ -15,7 +15,7 @@
 //    window with an edge on it follows. Ctrl+Shift snaps the line to the even
 //    positions. When a line reaches its MIN_CELL limit next to a line hidden
 //    inside a window, the drag carries on with that line (see moveLine()).
-//    Ctrl+drag on an outer edge takes over an unused line inside the window,
+//    Ctrl+drag on an outer edge takes over a grid line inside the window,
 //    or does nothing if there is none. Without Ctrl, the edge resizes
 //    just that window and it leaves the grid. Keys are checked the whole
 //    drag. Each monitor and workspace keeps its own grid, saved to disk;
@@ -613,11 +613,12 @@ function moveLine(grid, spansList, axis, idx, t, shift) {
 }
 
 // Ctrl+drag on a window side that lies on the screen edge. If the next grid
-// line in from that edge lies inside the window and no window edge uses it,
-// the side can take over that line. Returns { axis, key, start, j } (j is the
+// line in from that edge lies inside the window, the side can take over that
+// line. Lines span the whole monitor, so other windows with an edge on it
+// (in other rows or columns) follow, as with any line move. Returns { axis, key, start, j } (j is the
 // line number, 1..n-1), or null if there is no such line (then the drag is
 // blocked).
-function outerLine(W, spansList, mine, side) {
+function outerLine(W, mine, side) {
     const map = isLandscape(W)
         ? { left: ['long', true], right: ['long', false], top: ['short', true], bottom: ['short', false] }
         : { top: ['long', true], bottom: ['long', false], left: ['short', true], right: ['short', false] };
@@ -627,9 +628,7 @@ function outerLine(W, spansList, mine, side) {
     const span = mine[key];
     if (span[0] === span[1])
         return null;   // one cell wide: no line inside the window
-    const j = start ? 1 : n - 1;
-    const used = spansList.some(sp => sp[key][1] === j || sp[key][0] === j + 1);
-    return used ? null : { axis, key, start, j };
+    return { axis, key, start, j: start ? 1 : n - 1 };
 }
 
 // One edge (or corner) drag on a grid window. Muffin's own resize is ended
@@ -794,9 +793,9 @@ class ResizeSession {
                 const line = sideLine(grid.W, mine, side);
                 if (line === 'outer') {
                     // The side is on the screen edge. It can only move inward
-                    // onto an unused line inside the window; otherwise
+                    // onto a grid line inside the window; otherwise
                     // Ctrl+drag on an outer edge does nothing.
-                    const o = outerLine(grid.W, [...spans.values()], mine, side);
+                    const o = outerLine(grid.W, mine, side);
                     if (!o)
                         continue;
                     const len = positions(grid, o.axis)[o.key === 'l' ? 4 : 2];

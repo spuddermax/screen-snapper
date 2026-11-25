@@ -372,7 +372,7 @@ html { scroll-behavior: smooth; }
         <li><span class="do"><kbd>Ctrl</kbd> + drag an orange grip</span><span>The grid line moves, and every window on it follows.</span></li>
         <li><span class="do"><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + drag</span><span>The line snaps to the even eighths.</span></li>
         <li><span class="do">Drag with no keys</span><span>Only that window resizes, and it leaves the grid.</span></li>
-        <li><span class="do"><kbd>Ctrl</kbd> + drag Editor's left edge right</span><span>It leaves the screen edge and takes over the hidden line once it is 200 px in. Grey grips have no free line, so they stay put.</span></li>
+        <li><span class="do"><kbd>Ctrl</kbd> + drag Editor's left edge right</span><span>It leaves the screen edge and takes over the hidden line once it is 200 px in. Grey grips have no line inside their window, so they stay put.</span></li>
         <li><span class="do"><kbd>Ctrl</kbd> + drag Editor's right edge far left</span><span>It glides past the hidden line, and Editor ends up one column wide.</span></li>
         <li><span class="do">Press or release <kbd>Ctrl</kbd> mid-drag</span><span>Switches between moving the line and resizing one window.</span></li>
       </ul>
@@ -423,7 +423,7 @@ html { scroll-behavior: smooth; }
         <thead><tr><th>Keys</th><th>Edge on a grid line</th><th>Edge on the screen edge</th></tr></thead>
         <tbody>
           <tr><td class="k">none</td><td>Resizes only that window, as usual. The window leaves the grid and stops following line moves.</td><td>Resizes only that window and it leaves the grid.</td></tr>
-          <tr><td class="k">Ctrl</td><td>Moves the grid line across the whole monitor. Every grid window with an edge on it follows, live. The line stops 200 px from its neighbours and the screen edges.</td><td>If a grid line inside the window is unused (no window edge on it), the edge takes it over: it follows the pointer, and once 200 px in, that line moves with it. Let go sooner and the edge returns. With no unused line, nothing moves.</td></tr>
+          <tr><td class="k">Ctrl</td><td>Moves the grid line across the whole monitor. Every grid window with an edge on it follows, live. The line stops 200 px from its neighbours and the screen edges.</td><td>If a grid line runs through the window, the edge takes it over: it follows the pointer, and once 200 px in, that line moves with it, along with any other window edges on it. Let go sooner and the edge returns. If the window is one cell wide there, nothing moves.</td></tr>
           <tr><td class="k">Ctrl+Shift</td><td>Same, but the line jumps between the even-eighths positions, so it is easy to put back exactly.</td><td>Same, with the line snapping to even eighths.</td></tr>
         </tbody>
       </table>
@@ -778,7 +778,7 @@ function snapshotSizes() {
 
 // Decide what a drag on this side does, given the keys held when it starts.
 // Same as the extension: a side on the screen edge can take over the next
-// grid line in, if that line lies inside the window and no window edge uses it.
+// grid line in, if that line lies inside the window.
 function outerLine(w, side) {
   if (w.free) return null;
   const land = orient === 'landscape';
@@ -789,9 +789,7 @@ function outerLine(w, side) {
   const key = axis === 'long' ? 'l' : 's', n = axis === 'long' ? 4 : 2;
   const span = w[key];
   if (span[0] === span[1]) return null;
-  const j = start ? 1 : n - 1;
-  const used = cur().wins.some(x => !x.free && (x[key][1] === j || x[key][0] === j + 1));
-  return used ? null : { axis, key, start, j };
+  return { axis, key, start, j: start ? 1 : n - 1 };
 }
 let looseEdge = null;   // { name, side, v }: a side between the screen edge and its line
 
@@ -923,8 +921,8 @@ function report(d) {
   card.classList.toggle('blocked', d.kind === 'blocked');
   const t = document.getElementById('d-title'), det = document.getElementById('d-detail');
   if (d.kind === 'blocked') {
-    t.textContent = 'Blocked: no free grid line inside this window';
-    det.textContent = 'This edge is on the screen edge, and there is no unused grid line inside the window for it to move onto. Without Ctrl it resizes just that window.';
+    t.textContent = 'Blocked: no grid line inside this window';
+    det.textContent = 'This edge is on the screen edge, and the window is one cell wide here, so there is no grid line inside it to move onto. Without Ctrl it resizes just that window.';
   } else if (d.kind === 'outer') {
     t.textContent = `${d.w.name}'s edge is off the screen edge`;
     det.textContent = `Keep going: 200 px in, it takes over ${lineName(d.axis, d.j - 1).replace(/^The/, 'the')}. Let go now and it goes back.`;
@@ -932,7 +930,7 @@ function report(d) {
     const to = G()[d.axis][d.idx], even = defaultGrid(orient)[d.axis][d.idx];
     const moved = cur().wins.filter(w => startSizes.get(w.name) !== sizeText(winRect(w))).map(w => w.name);
     t.textContent = `${lineName(d.axis, d.idx)} moved`;
-    det.textContent = (d.offEdge ? `${d.offEdge}'s edge left the screen edge and took over this unused line. ` : '') + (d.handedFrom != null
+    det.textContent = (d.offEdge ? `${d.offEdge}'s edge left the screen edge and took over this line, which ran through the window. ` : '') + (d.handedFrom != null
       ? `Carried on from ${lineName(d.axis, d.handedFrom).replace(/^The/, 'the')}, which went back to where it was. `
       : '') +
       `${d.from} → ${to} px from the ${isVertical(d.axis) ? 'left' : 'top'}` +
