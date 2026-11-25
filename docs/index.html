@@ -1091,15 +1091,17 @@ function drawWinTable() {
     tr.innerHTML = `<td>${w.name}</td><td>${w.free ? 'off grid' : 'on grid'}</td><td>${sizeText(r)}</td>`;
     tb.appendChild(tr);
   }
-  const fresh = freshWorkspace(orient, ws);
-  const changed = JSON.stringify(G()) !== JSON.stringify(fresh.grid) || cur().wins.some(w => w.free);
+  // Anything different from the starting layout: the grid lines, a window's
+  // cells, or a window off the grid.
+  const layout = st => JSON.stringify([st.grid, st.wins.map(w => [w.name, w.l, w.s, w.free])]);
+  const changed = layout(cur()) !== layout(freshWorkspace(orient, ws));
   document.getElementById('d-reset').disabled = !changed;
 }
 document.getElementById('d-reset').addEventListener('click', () => {
   state[orient][ws] = freshWorkspace(orient, ws);
   document.getElementById('d-card').classList.remove('blocked');
   document.getElementById('d-title').textContent = `Workspace ${ws + 1} reset`;
-  document.getElementById('d-detail').textContent = 'Grid back to even eighths, and every window back on it.';
+  document.getElementById('d-detail').textContent = 'Grid back to even eighths, and every window back where it started.';
   drawDemo(); drawMap(true); drawCatalogue();
 });
 
