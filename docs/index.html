@@ -199,10 +199,11 @@ table.rules { border-collapse: collapse; width: 100%; font-size: 14px; }
 .hero-art { margin-top: 140px; }
 @media (max-width: 860px) { .hero-art { margin-top: 120px; } }
 .hero-art figcaption { margin-top: 10px; font-size: 13px; line-height: 1.6; color: var(--muted); }
-.hero-art figcaption { min-height: 3.2em; }
+.hero-art #hero-cap { display: block; min-height: 3.2em; }
 .hero-steps { display: flex; gap: 6px; margin-bottom: 6px; }
 .hero-steps i { width: 18px; height: 4px; border-radius: 2px; background: var(--line); transition: background .3s; }
 .hero-steps i.on { background: var(--result); }
+.hero-art .caret { display: inline-block; width: 2px; height: 1.05em; margin-left: 1px; vertical-align: -.15em; background: var(--result); }
 code { font: .92em var(--font-mono); }
 kbd { font: 500 12px var(--font-mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 1px 7px; background: var(--panel); color: var(--fg); white-space: nowrap; }
 
@@ -1369,9 +1370,15 @@ function heroAnimation() {
     wins: { Editor: { l: [1, 2], s: [1, 2] }, Browser: { l: [3, 3], s: [1, 1] }, Terminal: { l: [4, 4], s: [1, 2] }, Files: filesLoose },
   };
   const frames = [{ d: 0, s: start }];
-  const READ_MS = 4000;    // extra hold at the end of each scene, for reading
+  // After each scene's change, its caption types out, holds, then fades.
+  const CHAR_MS = 32, HOLD_MS = 2000, FADE_MS = 450;
+  const plain = html => html.replace(/<[^>]*>/g, '');
+  const explain = scene => frames.push({
+    d: plain(CAPS[scene]).length * CHAR_MS + HOLD_MS + FADE_MS,
+    s: frames[frames.length - 1].s, caption: scene,
+  });
   const go = (d, patch) => {
-    if (patch.scene !== undefined && frames.length > 1) frames.push({ d: READ_MS, s: frames[frames.length - 1].s });
+    if (patch.scene !== undefined && frames.length > 1) explain(frames[frames.length - 1].s.scene);
     const prev = frames[frames.length - 1].s;
     const s = { ...structuredClone(prev), ...structuredClone(patch) };
     if (patch.wins) s.wins = { ...structuredClone(prev.wins), ...structuredClone(patch.wins) };
@@ -1421,7 +1428,7 @@ function heroAnimation() {
   go(900, { grid: structuredClone(even) });
   go(400, { keys: '' });
   go(800, {});
-  go(READ_MS, {});
+  explain(5);
   go(400, { fade: 0 });
   go(0, { ...structuredClone(start), fade: 0 });
   go(400, { fade: 1 });
@@ -1485,16 +1492,42 @@ function heroAnimation() {
     svg.innerHTML = out;
     if (d.scene !== shownScene) {
       shownScene = d.scene;
-      cap.innerHTML = CAPS[d.scene];
       [...steps.children].forEach((el, i) => el.classList.toggle('on', i === d.scene));
     }
+  }
+
+  // The first n visible characters of an HTML caption, keeping tags whole.
+  function typed(html, n) {
+    let out = '', i = 0;
+    while (i < html.length && n > 0) {
+      if (html[i] === '<') { const j = html.indexOf('>', i) + 1; out += html.slice(i, j); i = j; continue; }
+      out += html[i++]; n--;
+    }
+    // Include closing tags that follow, so a finished <kbd> closes cleanly.
+    while (html.startsWith('</', i)) { const j = html.indexOf('>', i) + 1; out += html.slice(i, j); i = j; }
+    return out;
+  }
+  let capShown = null, capOpacity = null;
+  function setCaption(html, opacity) {
+    if (html !== capShown) { cap.innerHTML = html; capShown = html; }
+    if (opacity !== capOpacity) { cap.style.opacity = opacity; capOpacity = opacity; }
+  }
+  function caption(scene, ms) {
+    const full = CAPS[scene], n = plain(full).length, typeMs = n * CHAR_MS;
+    if (ms < typeMs) return setCaption(typed(full, Math.floor(ms / CHAR_MS) + 1) + '<span class="caret"></span>', 1);
+    if (ms < typeMs + HOLD_MS) return setCaption(full, 1);
+    setCaption(full, Math.max(0, 1 - (ms - typeMs - HOLD_MS) / FADE_MS));
   }
 
   function at(ms) {
     let t = ms % total;
     for (let i = 1; i < frames.length; i++) {
       const f = frames[i];
-      if (t < f.d) return draw(frames[i - 1].s, f.s, ease(t / f.d));
+      if (t < f.d) {
+        if (f.caption != null) caption(f.caption, t);
+        else setCaption('', 1);
+        return draw(frames[i - 1].s, f.s, ease(t / f.d));
+      }
       t -= f.d;
     }
     draw(frames[frames.length - 1].s, frames[frames.length - 1].s, 1);
@@ -1504,6 +1537,7 @@ function heroAnimation() {
     // A still: the grid line moved, mid-drag.
     const i = frames.findIndex(f => f.s.scene === 1 && f.s.grid.long[1] === 305);
     draw(frames[i].s, frames[i].s, 1);
+    setCaption(CAPS[1], 1);
     return;
   }
   const t0 = performance.now();
