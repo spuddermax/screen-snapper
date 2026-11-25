@@ -73,6 +73,9 @@ match.](docs/images/move-line.png)
 - **Without Ctrl**, dragging an edge resizes just that window as usual, and
   it leaves the grid: it won't follow line moves until you Ctrl-snap it again.
   Moving a grid window by hand also takes it off the grid.
+- While Ctrl is held during an edge drag, dotted lines show every grid line
+  on that monitor wherever it currently sits, including the one you are
+  moving.
 - The keys are checked the whole drag. What Ctrl does depends on where the
   edge is when you press it:
   - **Still near its own line** (within the 50 px band): Ctrl moves the line.

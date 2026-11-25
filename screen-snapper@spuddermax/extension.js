@@ -633,6 +633,79 @@ function outerLine(W, mine, side) {
     return { axis, key, start, j: start ? 1 : n - 1 };
 }
 
+// Dotted grid lines shown while Ctrl is held during an edge drag. Each line
+// is drawn once as a dashed strip; moving a line just moves its actor, so
+// following the pointer costs nothing to redraw.
+const DOT_WIDTH = 4;
+class DottedGrid {
+    constructor(grid) {
+        this.W = grid.W;
+        this.landscape = isLandscape(grid.W);
+        this.actors = [];
+        for (const axis of ['long', 'short']) {
+            grid[axis].forEach((v, idx) => {
+                const vertical = (axis === 'long') === this.landscape;
+                const len = vertical ? this.W.height : this.W.width;
+                const w = scaled(DOT_WIDTH);
+                const area = new St.DrawingArea({
+                    reactive: false,
+                    width: vertical ? w : len,
+                    height: vertical ? len : w,
+                });
+                area.connect('repaint', a => {
+                    const cr = a.get_context();
+                    const mid = w / 2;
+                    const dash = [scaled(8), scaled(6)];
+                    for (const [rgba, lw] of [[[0, 0, 0, 0.55], w], [[1, 1, 1, 0.95], w / 2]]) {
+                        cr.setSourceRGBA(...rgba);
+                        cr.setLineWidth(lw);
+                        cr.setDash(dash, 0);
+                        if (vertical) {
+                            cr.moveTo(mid, 0);
+                            cr.lineTo(mid, len);
+                        } else {
+                            cr.moveTo(0, mid);
+                            cr.lineTo(len, mid);
+                        }
+                        cr.stroke();
+                    }
+                    cr.$dispose();
+                });
+                area.hide();
+                global.window_group.add_child(area);
+                global.window_group.set_child_above_sibling(area, null);
+                this.actors.push({ area, axis, idx, vertical });
+            });
+        }
+    }
+
+    // Show the lines at the grid's current positions, or hide them.
+    update(grid, visible) {
+        const w = scaled(DOT_WIDTH);
+        for (const { area, axis, idx, vertical } of this.actors) {
+            if (!visible) {
+                area.hide();
+                continue;
+            }
+            const v = grid[axis][idx];
+            if (vertical)
+                area.set_position(Math.round(this.W.x + v - w / 2), this.W.y);
+            else
+                area.set_position(this.W.x, Math.round(this.W.y + v - w / 2));
+            if (!area.visible) {
+                global.window_group.set_child_above_sibling(area, null);
+                area.show();
+            }
+        }
+    }
+
+    destroy() {
+        for (const { area } of this.actors)
+            area.destroy();
+        this.actors = [];
+    }
+}
+
 // One edge (or corner) drag on a grid window. Muffin's own resize is ended
 // and the drag is run here, under a modal grab, so every grid window can be
 // placed exactly. Each update starts again from the layout at the start of
@@ -684,6 +757,7 @@ class ResizeSession {
         }
         global.display.set_cursor(RESIZE_CURSORS.get(op));
         this.pending = 0;
+        this.dots = new DottedGrid(this.grid0);
         // A window closing mid-drag leaves the drag; closing the one being
         // dragged cancels it.
         this.closeIds = this.members.map(w => [w, w.connect('unmanaged', () => this._dropWindow(w))]);
@@ -865,6 +939,7 @@ class ResizeSession {
                 });
             }
             this._place(this.window, onGrid ? gridRect(grid, mine) : plain);
+            this.dots.update(grid, ctrl);
             this.result = { mode: onGrid ? 'snap' : 'plain', grid, spans };
             return;
         }
@@ -907,6 +982,7 @@ class ResizeSession {
             }
             this._place(w, r);
         }
+        this.dots.update(grid, true);
         this.result = { mode: 'line', grid, spans };
     }
 
@@ -990,6 +1066,11 @@ class ResizeSession {
                 for (const [w, id] of this.closeIds)
                     w.disconnect(id);
                 this.closeIds = [];
+            },
+            () => {
+                if (this.dots)
+                    this.dots.destroy();
+                this.dots = null;
             },
             () => global.display.set_cursor(Meta.Cursor.DEFAULT),
             () => {
