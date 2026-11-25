@@ -190,7 +190,7 @@ table.rules { border-collapse: collapse; width: 100%; font-size: 14px; }
 .hero-art { position: relative; margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; box-shadow: 0 24px 48px -32px rgba(20, 30, 45, .45); }
 .hero-art > svg:not(.mascot) { display: block; width: 100%; height: auto; }
 /* Snappy, the mascot, stands on the demo screen's top edge. */
-.hero-art > .mascot { position: absolute; width: clamp(150px, 36%, 220px); height: auto; right: 8px; top: 0; transform: translateY(-80%); filter: drop-shadow(0 10px 12px rgba(20, 30, 20, .25)); pointer-events: none; }
+.hero-art > .mascot { position: absolute; width: clamp(150px, 36%, 220px); height: auto; right: 8px; top: -10px; transform: translateY(-80%) scaleX(-1); filter: drop-shadow(0 10px 12px rgba(20, 30, 20, .25)); pointer-events: none; }
 .hero-art { margin-top: 140px; }
 @media (max-width: 860px) { .hero-art { margin-top: 120px; } }
 .hero-art figcaption { margin-top: 10px; font-size: 13px; line-height: 1.6; color: var(--muted); }
