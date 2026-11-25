@@ -41,7 +41,7 @@ Together these reach all 30 rectangles the grid allows.
 pointer is on the crossing of the first column line and the middle line, the
 dashed outline shows the window covering columns 1–2 in both rows, and the
 list of all 30 windows beside the map has that window
-picked.](docs/images/drop-map.png)
+picked.](docs/images/drop-map-dark.png)
 
 Cinnamon's own edge tiling is turned off while the extension is enabled and
 turned back on when you disable it. Super+arrow keyboard tiling still works.
@@ -54,7 +54,7 @@ edge on it resizes live, and later snaps use the moved line.
 
 ![Ctrl-dragging Editor's right edge moves the line between columns 2 and 3
 from 960 to 1180 px. Browser and Files, which share that line, shrink to
-match.](docs/images/move-line.png)
+match.](docs/images/move-line-dark.png)
 
 - **Ctrl+Shift** while dragging makes the line jump to the even-eighths
   positions, so it's easy to put back exactly.
@@ -64,7 +64,7 @@ match.](docs/images/move-line.png)
 
   ![Dragging Editor's edge further left carries on past the hidden line
   between columns 1 and 2: Editor ends up 330 px wide and Browser and Files
-  stretch across columns 2–3.](docs/images/hand-off.png)
+  stretch across columns 2–3.](docs/images/hand-off-dark.png)
 - **Ctrl+drag on an edge at the screen edge** takes over the next grid line
   in, if that line runs through the window. The edge follows the pointer, and
   once it is 200 px from the screen edge the line moves with it, along with
