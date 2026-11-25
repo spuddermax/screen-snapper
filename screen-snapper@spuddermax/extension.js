@@ -15,7 +15,8 @@
 //    window with an edge on it follows. Ctrl+Shift snaps the line to the even
 //    positions. When a line reaches its MIN_CELL limit next to a line hidden
 //    inside a window, the drag carries on with that line (see moveLine()).
-//    Ctrl+drag on an outer edge does nothing. Without Ctrl, the edge resizes
+//    Ctrl+drag on an outer edge takes over an unused line inside the window,
+//    or does nothing if there is none. Without Ctrl, the edge resizes
 //    just that window and it leaves the grid. Keys are checked the whole
 //    drag. Each monitor and workspace keeps its own grid, saved to disk;
 //    Super+Ctrl+G resets the one under the pointer.
@@ -611,6 +612,26 @@ function moveLine(grid, spansList, axis, idx, t, shift) {
     return { axis, idx: a - 1 };
 }
 
+// Ctrl+drag on a window side that lies on the screen edge. If the next grid
+// line in from that edge lies inside the window and no window edge uses it,
+// the side can take over that line. Returns { axis, key, start, j } (j is the
+// line number, 1..n-1), or null if there is no such line (then the drag is
+// blocked).
+function outerLine(W, spansList, mine, side) {
+    const map = isLandscape(W)
+        ? { left: ['long', true], right: ['long', false], top: ['short', true], bottom: ['short', false] }
+        : { top: ['long', true], bottom: ['long', false], left: ['short', true], right: ['short', false] };
+    const [axis, start] = map[side];
+    const key = axis === 'long' ? 'l' : 's';
+    const n = axis === 'long' ? 4 : 2;
+    const span = mine[key];
+    if (span[0] === span[1])
+        return null;   // one cell wide: no line inside the window
+    const j = start ? 1 : n - 1;
+    const used = spansList.some(sp => sp[key][1] === j || sp[key][0] === j + 1);
+    return used ? null : { axis, key, start, j };
+}
+
 // One edge (or corner) drag on a grid window. Muffin's own resize is ended
 // and the drag is run here, under a modal grab, so every grid window can be
 // placed exactly. Each update starts again from the layout at the start of
@@ -763,13 +784,34 @@ class ResizeSession {
         if (!mine)
             return;
         let plain = null;
+        // A side that came off the screen edge but isn't yet far enough in to
+        // take over a grid line: [side, offset from the work area start].
+        const loose = [];
 
         for (const side of this.sides) {
             const delta = side === 'left' || side === 'right' ? px - this.startX : py - this.startY;
             if (ctrl) {
                 const line = sideLine(grid.W, mine, side);
-                if (line === 'outer')
-                    continue;   // Ctrl+drag on an outer edge does nothing
+                if (line === 'outer') {
+                    // The side is on the screen edge. It can only move inward
+                    // onto an unused line inside the window; otherwise
+                    // Ctrl+drag on an outer edge does nothing.
+                    const o = outerLine(grid.W, [...spans.values()], mine, side);
+                    if (!o)
+                        continue;
+                    const len = positions(grid, o.axis)[o.key === 'l' ? 4 : 2];
+                    const at = (o.start ? 0 : len) + delta;
+                    const inward = o.start ? at : len - at;
+                    if (inward < scaled(MIN_CELL)) {
+                        // Too close to the screen edge for a grid line: the side
+                        // follows the pointer, and goes back if released here.
+                        loose.push([side, Math.min(Math.max(at, 0), len)]);
+                        continue;
+                    }
+                    mine[o.key][o.start ? 0 : 1] = o.start ? o.j + 1 : o.j;
+                    moveLine(grid, [...spans.values()], o.axis, o.j - 1, at, shift);
+                    continue;
+                }
                 const t = grid[line.axis][line.idx] + delta;
                 moveLine(grid, [...spans.values()], line.axis, line.idx, t, shift);
             } else {
@@ -792,8 +834,14 @@ class ResizeSession {
         }
 
         if (ctrl) {
-            for (const w of this.members)
-                this._place(w, gridRect(grid, spans.get(w)));
+            for (const w of this.members) {
+                const r = gridRect(grid, spans.get(w));
+                if (w === this.window) {
+                    for (const [side, at] of loose)
+                        this._looseSide(r, grid.W, side, at);
+                }
+                this._place(w, r);
+            }
         } else {
             // Others go back to where they were; just this window resizes.
             for (const w of this.members) {
@@ -804,6 +852,25 @@ class ResizeSession {
         }
         this.result = { ctrl, grid, spans };
 
+    }
+
+    // Move one side of rect r to `at` (an offset into the work area W), keeping
+    // the window at least MIN_CELL across.
+    _looseSide(r, W, side, at) {
+        const minSize = scaled(MIN_CELL);
+        if (side === 'left') {
+            const right = r.x + r.width;
+            r.x = Math.min(W.x + at, right - minSize);
+            r.width = right - r.x;
+        } else if (side === 'right') {
+            r.width = Math.max(W.x + at - r.x, minSize);
+        } else if (side === 'top') {
+            const bottom = r.y + r.height;
+            r.y = Math.min(W.y + at, bottom - minSize);
+            r.height = bottom - r.y;
+        } else {
+            r.height = Math.max(W.y + at - r.y, minSize);
+        }
     }
 
     // commit: false (Escape) puts everything back as it was.
@@ -835,6 +902,8 @@ class ResizeSession {
             return;
         }
         if (this.result.ctrl) {
+            for (const [w, sp] of this.result.spans)
+                this._place(w, gridRect(this.result.grid, sp));
             saveGrid(this.monitor, this.wsIndex, this.result.grid);
             for (const [w, sp] of this.result.spans)
                 track(w, this.monitor, this.wsIndex, sp.l, sp.s);

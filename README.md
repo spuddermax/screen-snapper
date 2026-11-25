@@ -65,7 +65,11 @@ match.](docs/images/move-line.png)
   ![Dragging Editor's edge further left carries on past the hidden line
   between columns 1 and 2: Editor ends up 330 px wide and Browser and Files
   stretch across columns 2–3.](docs/images/hand-off.png)
-- **Ctrl+drag on an edge at the screen edge** does nothing.
+- **Ctrl+drag on an edge at the screen edge** takes over the next grid line
+  in, if that line lies inside the window and no window edge uses it. The
+  edge follows the pointer, and once it is 200 px from the screen edge the
+  line moves with it. Let go sooner and the edge goes back. With no such
+  line, nothing moves.
 - **Without Ctrl**, dragging an edge resizes just that window as usual, and
   it leaves the grid: it won't follow line moves until you Ctrl-snap it again.
   Moving a grid window by hand also takes it off the grid.
