@@ -424,6 +424,7 @@ html { scroll-behavior: smooth; }
         <tbody>
           <tr><td class="k">none</td><td>Resizes only that window, as usual. The window leaves the grid and stops following line moves.</td><td>Resizes only that window and it leaves the grid.</td></tr>
           <tr><td class="k">Ctrl</td><td>Moves the grid line across the whole monitor. Every grid window with an edge on it follows, live. The line stops 200 px from its neighbours and the screen edges.</td><td>If a grid line runs through the window, the edge takes it over: it follows the pointer, and once 200 px in, that line moves with it, along with any other window edges on it. Let go sooner and the edge returns. If the window is one cell wide there, nothing moves.</td></tr>
+          <tr><td class="k">Ctrl, on an off-grid window</td><td colspan="2">The edge snaps to any grid line or screen edge within 50 px. Once all four edges are on the grid, the window joins it and follows line moves again.</td></tr>
           <tr><td class="k">Ctrl, pressed late</td><td colspan="2">The edge snaps to the grid line or screen edge whose 50 px band it is in, and the window rejoins the grid covering those cells. No line moves. Release Ctrl and it is a plain resize again.</td></tr>
           <tr><td class="k">Ctrl+Shift</td><td>Same, but the line jumps between the even-eighths positions, so it is easy to put back exactly.</td><td>Same, with the line snapping to even eighths.</td></tr>
         </tbody>
@@ -455,7 +456,7 @@ html { scroll-behavior: smooth; }
       <li>A window's own minimum size can stop a line before the 200 px limit.</li>
       <li>Ctrl+Shift while moving a window (not an edge) shows Shift's edge-snapping targets instead, and the grid doesn't snap.</li>
       <li>Escape cancels an edge drag and puts every window back. Closing the window you are dragging cancels it too.</li>
-      <li>On the desktop, dotted grid lines appear wherever the lines currently sit while you hold Ctrl during an edge drag (on any window, on the grid or not), and disappear when you release it.</li>
+      <li>On the desktop, dotted grid lines appear wherever the lines currently sit while you hold Ctrl during an edge drag (on any window; an off-grid window's edge also snaps to them and the window joins the grid once all four edges line up), and disappear when you release it.</li>
       <li>Sizes here are for 100% scale; on a HiDPI screen the 50 px bands and 200 px limit scale with it.</li>
     </ul>
   </section>
@@ -827,6 +828,37 @@ function snapEdge(w, side, v) {
   return a;
 }
 
+// An off-grid window's side, with Ctrl: snaps to the line or screen edge
+// whose band v is in. If every edge is then on the grid, the window joins it.
+function snapFree(w, side, v) {
+  const land = orient === 'landscape';
+  const horiz = side === 'left' || side === 'right';
+  const axis = horiz === land ? 'long' : 'short';
+  const p = posOf(G(), axis);
+  const k = p.findIndex(x => Math.abs(x - v) <= BAND);
+  const a = { kind: 'resize', w, side, wasOnGrid: false, withCtrl: true, freeSnap: k >= 0 };
+  resizeAlone(a, k >= 0 ? p[k] : v);
+  const sp = spansOfRect(w.free);
+  if (sp) {
+    w.l = sp.l; w.s = sp.s; w.free = null;
+    return { kind: 'joined', w, side };
+  }
+  return a;
+}
+
+// The cells a rect covers if all its edges are on grid lines or screen
+// edges (not the whole screen, which is maximized), else null.
+function spansOfRect(r) {
+  const land = orient === 'landscape';
+  const at = (axis, v) => posOf(G(), axis).findIndex(x => Math.abs(x - v) < 1);
+  const [lx, sx] = land ? ['long', 'short'] : ['short', 'long'];
+  const x0 = at(lx, r.x), x1 = at(lx, r.x + r.w), y0 = at(sx, r.y), y1 = at(sx, r.y + r.h);
+  if (Math.min(x0, x1, y0, y1) < 0 || x1 <= x0 || y1 <= y0) return null;
+  const [l0, l1, s0, s1] = land ? [x0, x1, y0, y1] : [y0, y1, x0, x1];
+  if (l0 === 0 && l1 === 4 && s0 === 0 && s1 === 2) return null;
+  return { l: [l0 + 1, l1], s: [s0 + 1, s1] };
+}
+
 function setLineTo(d, v, shift) {
   const p = posOf(G(), d.axis);
   const lo = p[d.idx] + MIN_CELL, hi = p[d.idx + 2] - MIN_CELL;
@@ -920,7 +952,14 @@ function applyDrag(e) {
   else if (!d.ctrlMode) d.ctrlMode = Math.abs(delta) <= BAND ? 'line' : 'snap';
   let action = beginAction(w, d.side, { ctrlKey: ctrl && d.ctrlMode === 'line' });
   looseEdge = null;
-  if (ctrl && d.ctrlMode === 'snap') {
+  if (ctrl && w.free) {
+    // Same as the extension: an off-grid window's edge snaps to the grid
+    // lines while Ctrl is held, and the window joins the grid once all four
+    // edges are on lines or screen edges.
+    const r = winRect(w);
+    const edge = { left: r.x, right: r.x + r.w, top: r.y, bottom: r.y + r.h }[d.side];
+    action = snapFree(w, d.side, edge + delta);
+  } else if (ctrl && d.ctrlMode === 'snap') {
     const r = winRect(w);
     const edge = { left: r.x, right: r.x + r.w, top: r.y, bottom: r.y + r.h }[d.side];
     action = snapEdge(w, d.side, edge + delta);
@@ -960,6 +999,12 @@ function report(d) {
     const to = d.k === 0 || d.k === d.n ? 'the screen edge' : lineName(d.axis, d.k - 1).replace(/^The/, 'the');
     t.textContent = `${d.w.name}'s ${d.side} edge snapped to ${to}`;
     det.textContent = `Ctrl went down away from the edge's own line, so the edge snaps instead of moving a line. ${d.w.name} is back on the grid: ${winName({ l: d.w.l, s: d.w.s }).toLowerCase()}. No line moved.`;
+  } else if (d.kind === 'joined') {
+    t.textContent = `${d.w.name} joined the grid`;
+    det.textContent = `With Ctrl, the off-grid window's edge snapped to the grid, and now all four edges sit on grid lines or screen edges, so it is a grid window again: ${winName({ l: d.w.l, s: d.w.s }).toLowerCase()}. It follows line moves from now on.`;
+  } else if (d.kind === 'resize' && d.withCtrl) {
+    t.textContent = d.freeSnap ? `${d.w.name}'s edge snapped to a grid line` : `${d.w.name}'s edge is looking for a line`;
+    det.textContent = 'This window is off the grid. With Ctrl its edge snaps to any grid line or screen edge it gets within 50 px of. Once all four edges are on the grid, it joins it.';
   } else if (d.kind === 'resize' && d.seeking) {
     t.textContent = `${d.w.name}'s edge is looking for a line`;
     det.textContent = 'Ctrl went down away from the edge\'s own line, so the edge snaps to the next grid line or screen edge it gets within 50 px of. Release Ctrl for a plain resize.';

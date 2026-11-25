@@ -19,7 +19,9 @@
 //    or does nothing if there is none. Without Ctrl, the edge resizes
 //    just that window and it leaves the grid; pressing Ctrl once the edge
 //    has left its line's band snaps the edge to the next line or screen edge
-//    and puts the window back on the grid. Keys are checked the whole
+//    and puts the window back on the grid. On an off-grid window, Ctrl
+//    snaps the dragged edge to the grid lines, and the window joins the
+//    grid once all four edges are on it. Keys are checked the whole
 //    drag. Each monitor and workspace keeps its own grid, saved to disk;
 //    Super+Ctrl+G resets the one under the pointer.
 //
@@ -499,6 +501,28 @@ function adoptWindows(monitor, wsIndex, grid) {
 
 // Tracked windows on a monitor and workspace that are still on its grid.
 // Ones that have wandered off are dropped from tracking.
+// The cells a rect covers, if every edge of it is on a grid line or screen
+// edge: { l, s }, or null. A rect covering the whole work area is left out,
+// as that is a maximized window rather than a grid one.
+function spansOf(grid, rect) {
+    const W = grid.W;
+    const land = isLandscape(W);
+    const x0 = rect.x - W.x, x1 = x0 + rect.width;
+    const y0 = rect.y - W.y, y1 = y0 + rect.height;
+    const [l0, l1, s0, s1] = land ? [x0, x1, y0, y1] : [y0, y1, x0, x1];
+    // Window sizes can be rounded to the app's size steps (a terminal's
+    // character cells), so either edge may be a little off the line.
+    const tol = scaled(SIZE_TOLERANCE) / 2;
+    const at = (p, v) => p.findIndex(x => Math.abs(x - v) <= tol);
+    const pl = positions(grid, 'long'), ps = positions(grid, 'short');
+    const a = at(pl, l0), b = at(pl, l1), c = at(ps, s0), d = at(ps, s1);
+    if (a < 0 || b <= a || c < 0 || d <= c)
+        return null;
+    if (a === 0 && b === 4 && c === 0 && d === 2)
+        return null;
+    return { l: [a + 1, b], s: [c + 1, d] };
+}
+
 function gridMembers(monitor, wsIndex, grid) {
     adoptWindows(monitor, wsIndex, grid);
     const out = [];
@@ -706,23 +730,29 @@ class DottedGrid {
     }
 }
 
-// During Muffin's own resize of an off-grid window: show the dotted grid
-// lines of the window's monitor while Ctrl is held.
-class GridLinesWhileCtrl {
-    constructor(win) {
-        const ws = win.get_workspace() || activeWorkspace();
-        this.grid = gridFor(win.get_monitor(), ws.index());
-        this.dots = new DottedGrid(this.grid);
+// During Muffin's own resize of an off-grid window: wait for Ctrl. When it
+// goes down, take the resize over (as for grid windows) so the edge can
+// snap to the grid lines.
+class OffGridResize {
+    constructor(win, op) {
+        this.window = win;
+        this.op = op;
         this.timer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, POLL_MS, () => {
             this._tick();
-            return GLib.SOURCE_CONTINUE;
+            return this.timer ? GLib.SOURCE_CONTINUE : GLib.SOURCE_REMOVE;
         });
         this._tick();
     }
 
     _tick() {
         const [, , mods] = global.get_pointer();
-        this.dots.update(this.grid, keysHeld(mods).ctrl);
+        if ((mods & Clutter.ModifierType.BUTTON1_MASK) === 0 || !keysHeld(mods).ctrl)
+            return;
+        this.destroy();
+        if (session !== this)
+            return;
+        const s = new ResizeSession(this.window, this.op, null);
+        session = s.done ? null : s;
     }
 
     finish() {
@@ -734,9 +764,6 @@ class GridLinesWhileCtrl {
         if (this.timer)
             GLib.source_remove(this.timer);
         this.timer = 0;
-        if (this.dots)
-            this.dots.destroy();
-        this.dots = null;
     }
 }
 
@@ -745,11 +772,14 @@ class GridLinesWhileCtrl {
 // placed exactly. Each update starts again from the layout at the start of
 // the drag and applies the keys held right now.
 class ResizeSession {
+    // info: the window's tracking entry, or null for an off-grid window,
+    // whose edges then snap to the grid lines while Ctrl is held.
     constructor(win, op, info) {
         this.window = win;
         this.sides = RESIZE_SIDES.get(op);
-        this.monitor = info.monitor;
-        this.wsIndex = info.ws;
+        this.offGrid = !info;
+        this.monitor = info ? info.monitor : win.get_monitor();
+        this.wsIndex = info ? info.ws : (win.get_workspace() || activeWorkspace()).index();
         this.grid0 = gridFor(this.monitor, this.wsIndex);
         this.members = gridMembers(this.monitor, this.wsIndex, this.grid0);
         this.spans0 = new Map(this.members.map(w => {
@@ -759,6 +789,7 @@ class ResizeSession {
         this.startRect = rectOf(win.get_frame_rect());
         [this.startX, this.startY] = global.get_pointer();
         this.applied = new Map(this.members.map(w => [w, rectOf(w.get_frame_rect())]));
+        this.applied.set(win, this.startRect);
         this.result = null;
         this.ctrlMode = null;   // what Ctrl does this drag: 'line' or 'snap'
         this.done = false;
@@ -930,6 +961,36 @@ class ResizeSession {
         return near ? 'line' : 'snap';
     }
 
+    // An off-grid window: each dragged side follows the pointer, and while
+    // Ctrl is held snaps to the grid line or screen edge whose band it is in.
+    _updateOffGrid(px, py, ctrl) {
+        const r = this._plainRect(px, py);
+        const W = this.grid0.W;
+        if (ctrl) {
+            for (const side of this.sides) {
+                const { axis, at } = this._sideAt(r, side);
+                const k = positions(this.grid0, axis).findIndex(v => Math.abs(v - at) <= scaled(BAND));
+                if (k < 0)
+                    continue;
+                const v = positions(this.grid0, axis)[k] + (side === 'left' || side === 'right' ? W.x : W.y);
+                if (side === 'left' && v < r.x + r.width) {
+                    r.width += r.x - v;
+                    r.x = v;
+                } else if (side === 'right' && v > r.x) {
+                    r.width = v - r.x;
+                } else if (side === 'top' && v < r.y + r.height) {
+                    r.height += r.y - v;
+                    r.y = v;
+                } else if (side === 'bottom' && v > r.y) {
+                    r.height = v - r.y;
+                }
+            }
+        }
+        this._place(this.window, r);
+        this.dots.update(this.grid0, ctrl);
+        this.result = { mode: 'free', rect: r };
+    }
+
     // pointer: [x, y, mods], or omitted to read them now.
     _update(pointer) {
         if (this.done)
@@ -944,6 +1005,10 @@ class ResizeSession {
             this.ctrlMode = this._ctrlMode(px, py);
         const grid = { W: this.grid0.W, long: [...this.grid0.long], short: [...this.grid0.short] };
         const spans = new Map([...this.spans0].map(([w, sp]) => [w, { l: [...sp.l], s: [...sp.s] }]));
+        if (this.offGrid) {
+            this._updateOffGrid(px, py, ctrl);
+            return;
+        }
         const mine = spans.get(this.window);
         if (!mine)
             return;
@@ -1065,9 +1130,19 @@ class ResizeSession {
         if (!commit || !this.result) {
             for (const w of this.members)
                 this._place(w, w === this.window ? this.startRect : gridRect(this.grid0, this.spans0.get(w)));
+            if (this.offGrid)
+                this._place(this.window, this.startRect);
             return;
         }
-        if (this.result.mode === 'line') {
+        if (this.result.mode === 'free') {
+            // An off-grid window joins the grid once all four of its edges
+            // sit on grid lines or screen edges.
+            const sp = spansOf(this.grid0, this.window.get_frame_rect());
+            if (sp) {
+                this._place(this.window, gridRect(this.grid0, sp));
+                track(this.window, this.monitor, this.wsIndex, sp.l, sp.s);
+            }
+        } else if (this.result.mode === 'line') {
             for (const [w, sp] of this.result.spans)
                 this._place(w, gridRect(this.result.grid, sp));
             saveGrid(this.monitor, this.wsIndex, this.result.grid);
@@ -1511,10 +1586,9 @@ function onGrabBegin(...args) {
     }
     if (info && (RESIZE_SIDES.has(op) || isKeyboardResizeOp(op)))
         untrack(win);   // resized some other way: off the grid
-    // Not a grid window: Muffin resizes it as usual, and we only show the
-    // grid lines while Ctrl is held.
+    // Not a grid window: Muffin resizes it as usual until Ctrl goes down.
     if (RESIZE_SIDES.has(op))
-        session = new GridLinesWhileCtrl(win);
+        session = new OffGridResize(win, op);
 }
 
 function onGrabEnd() {
