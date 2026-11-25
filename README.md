@@ -1,4 +1,4 @@
-<p align="center"><img src="docs/images/mascot.svg" width="200" alt="The Screen Snapper mascot: a snapping turtle whose shell is the 4 by 2 grid, with one cell snapped in orange"></p>
+<p align="center"><img src="docs/images/snappy-turtle-400.png" width="260" alt="Snappy, the Screen Snapper mascot: a grinning snapping turtle with an orange patch on its shell, pumping a fist"></p>
 
 # Screen Snapper
 
