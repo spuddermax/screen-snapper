@@ -83,10 +83,8 @@ header { display: flex; flex-direction: column; gap: 14px; }
 .seg button:focus-visible, .btn:focus-visible, .key:focus-visible, .zone:focus-visible, .mini:focus-visible, .grip:focus-visible { outline: 3px solid var(--result); outline-offset: 2px; }
 .monitor-note, .hint { color: var(--muted); font-size: 13px; }
 
-.work { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
 .map-box { flex: 1 1 560px; min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin: 0; display: flex; flex-direction: column; gap: 12px; }
 .map-box svg { display: block; width: 100%; height: auto; max-height: 74vh; margin: 0 auto; touch-action: none; user-select: none; -webkit-user-select: none; }
-.readout { flex: 1 1 280px; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
 .card.blocked { border-color: var(--blocked); }
 .card.blocked .result-title { color: var(--blocked); }
@@ -104,7 +102,6 @@ header { display: flex; flex-direction: column; gap: 14px; }
 .wins tr.changed td { color: var(--result); font-weight: 500; }
 .keys-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
 
-.try { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
 .legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; color: var(--muted); }
 .legend span { display: inline-flex; align-items: center; gap: 7px; }
 .sw { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
@@ -121,6 +118,25 @@ table.rules { border-collapse: collapse; width: 100%; font-size: 14px; }
 .rules td .sw { vertical-align: -2px; margin-right: 8px; }
 .rules td.k { white-space: nowrap; font-family: var(--font-mono); font-size: 13px; }
 
+/* Try-it-now controls: one bar with labelled groups. */
+.control-bar { display: flex; flex-wrap: wrap; gap: 12px 28px; align-items: flex-end; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.ctl { display: flex; flex-direction: column; gap: 6px; }
+.ctl-label { font: 600 11px var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
+.ctl-sub { text-transform: none; letter-spacing: 0; font-weight: 400; margin-left: 4px; }
+.map-box .legend .monitor-note { margin-left: auto; }
+/* A side column that takes its height from the figure beside it. */
+.fill-panel { position: relative; min-width: 0; min-height: 360px; }
+.fill { position: absolute; inset: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 14px; }
+.things { display: flex; flex-direction: column; gap: 10px; }
+.things-title { margin: 0; font: 600 1.05rem var(--font-display); }
+.things-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.things-grid li { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; font-size: 14px; color: var(--muted); min-width: 0; }
+.things-grid .do { color: var(--fg); font-weight: 600; }
+@media (max-width: 860px) {
+  .things-grid { grid-template-columns: 1fr; }
+  .fill-panel { min-height: 0; }
+  .fill { position: static; }
+}
 /* Map with the catalogue beside it: the map sets the row height, and the
    catalogue scrolls within it. Stacks on narrow screens. */
 .map-layout { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: 20px; }
@@ -288,60 +304,71 @@ html { scroll-behavior: smooth; }
     <div class="try-head">
       <span class="live"><span class="dot" aria-hidden="true"></span>Interactive demo</span>
       <h2 id="demo-h">Try it now: move a grid line</h2>
-      <p>This is a working model of the extension, sized to a real 1920 × 1080 screen. These windows were snapped into the grid. Grab any orange grip on a window edge and drag it, holding the keys the way you would on the desktop.</p>
+      <p>A working model of the extension on a real-size screen. Drag any grip on a window edge, holding the keys as you would on the desktop.</p>
     </div>
-    <div class="toolbar">
-      <div class="seg" role="group" aria-label="Monitor">
-        <button id="btn-landscape" type="button" aria-pressed="true">Landscape 4 × 2</button>
-        <button id="btn-portrait" type="button" aria-pressed="false">Portrait 2 × 4</button>
+
+    <div class="control-bar">
+      <div class="ctl">
+        <span class="ctl-label" id="lbl-screen">Screen</span>
+        <div class="seg" role="group" aria-labelledby="lbl-screen">
+          <button id="btn-landscape" type="button" aria-pressed="true">Landscape 4 × 2</button>
+          <button id="btn-portrait" type="button" aria-pressed="false">Portrait 2 × 4</button>
+        </div>
       </div>
-      <div class="seg" role="group" aria-label="Workspace">
-        <button id="btn-ws0" type="button" aria-pressed="true">Workspace 1</button>
-        <button id="btn-ws1" type="button" aria-pressed="false">Workspace 2</button>
+      <div class="ctl">
+        <span class="ctl-label" id="lbl-ws">Workspace</span>
+        <div class="seg" role="group" aria-labelledby="lbl-ws">
+          <button id="btn-ws0" type="button" aria-pressed="true">1</button>
+          <button id="btn-ws1" type="button" aria-pressed="false">2</button>
+        </div>
       </div>
-      <span class="monitor-note" id="monitor-note"></span>
-    </div>
-    <div class="work">
-      <figure class="map-box">
+      <div class="ctl">
+        <span class="ctl-label">Keys <span class="ctl-sub">hold, or tap to latch</span></span>
         <div class="keys-row">
-          <span class="hint">Keys:</span>
           <button class="key" id="key-ctrl" type="button" aria-pressed="false">Ctrl</button>
           <button class="key" id="key-shift" type="button" aria-pressed="false">Shift</button>
-          <span class="hint">Hold the real keys while dragging, or tap these to latch them.</span>
         </div>
+      </div>
+    </div>
+
+    <div class="map-layout">
+      <figure class="map-box">
         <svg id="demo" role="img" aria-label="Example screen with windows snapped into the grid. Each window edge has a grip to drag."></svg>
         <figcaption class="legend">
           <span><i class="sw" style="background:var(--result)"></i>Grip on a grid line</span>
           <span><i class="sw" style="background:var(--grid)"></i>Grip on the screen edge</span>
           <span><i class="sw" style="border:2px dashed var(--muted)"></i>Even eighths</span>
           <span><i class="sw" style="border:2px dashed var(--grid)"></i>Window off the grid</span>
+          <span class="monitor-note" id="monitor-note"></span>
         </figcaption>
       </figure>
-      <aside class="readout">
-        <div class="card" id="d-card" aria-live="polite">
-          <div class="eyebrow">What happened</div>
-          <div id="d-title" class="result-title">Nothing yet</div>
-          <div id="d-detail" class="hint">Try the list below.</div>
+      <div class="fill-panel">
+        <div class="fill">
+          <div class="card" id="d-card" aria-live="polite">
+            <div class="eyebrow">What happened</div>
+            <div id="d-title" class="result-title">Nothing yet</div>
+            <div id="d-detail" class="hint">Drag a grip, or pick something from the list below.</div>
+          </div>
+          <div class="card">
+            <div class="eyebrow" id="d-wins-h">Windows</div>
+            <table class="wins mono"><tbody id="d-wins"></tbody></table>
+            <button class="btn" id="d-reset" type="button">Reset this workspace's grid</button>
+            <span class="hint">On the desktop, <kbd>Super</kbd> + <kbd>Ctrl</kbd> + <kbd>G</kbd> does this for the monitor under the pointer.</span>
+          </div>
         </div>
-        <div class="card">
-          <div class="eyebrow">Try</div>
-          <ul class="try">
-            <li><b>Ctrl</b> + drag a shared edge: the line moves for every window on it.</li>
-            <li><b>Ctrl+Shift</b> + drag: the line jumps between the even-eighths positions.</li>
-            <li>Drag an edge <b>without Ctrl</b>: only that window resizes, and it leaves the grid.</li>
-            <li><b>Ctrl</b> + drag an edge on the screen edge: nothing moves.</li>
-            <li><b>Ctrl</b> + drag Editor's right edge far left: it glides past the hidden line between columns 1 and 2 without stopping, and Editor ends up one column wide.</li>
-            <li>Press or release <b>Ctrl</b> partway through a drag: it switches between moving the line and resizing one window, right away.</li>
-            <li>Switch workspace or monitor: each has its own grid.</li>
-          </ul>
-        </div>
-        <div class="card">
-          <div class="eyebrow" id="d-wins-h">Windows</div>
-          <table class="wins mono"><tbody id="d-wins"></tbody></table>
-          <button class="btn" id="d-reset" type="button">Reset this workspace's grid</button>
-          <span class="hint">On the desktop: Super+Ctrl+G resets the grid on the monitor under the pointer, on the current workspace.</span>
-        </div>
-      </aside>
+      </div>
+    </div>
+
+    <div class="things">
+      <h3 class="things-title">Things to try</h3>
+      <ul class="things-grid">
+        <li><span class="do"><kbd>Ctrl</kbd> + drag an orange grip</span><span>The grid line moves, and every window on it follows.</span></li>
+        <li><span class="do"><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + drag</span><span>The line snaps to the even eighths.</span></li>
+        <li><span class="do">Drag with no keys</span><span>Only that window resizes, and it leaves the grid.</span></li>
+        <li><span class="do"><kbd>Ctrl</kbd> + drag a grey grip</span><span>Blocked: screen edges don't move.</span></li>
+        <li><span class="do"><kbd>Ctrl</kbd> + drag Editor's right edge far left</span><span>It glides past the hidden line, and Editor ends up one column wide.</span></li>
+        <li><span class="do">Press or release <kbd>Ctrl</kbd> mid-drag</span><span>Switches between moving the line and resizing one window.</span></li>
+      </ul>
     </div>
   </section>
 
