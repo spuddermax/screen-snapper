@@ -105,6 +105,11 @@ header { display: flex; flex-direction: column; gap: 14px; }
 .wins td:nth-child(2) { color: var(--muted); font-family: var(--font-body); font-size: 12px; text-align: center; }
 .wins td:last-child { text-align: right; }
 .wins tr.changed td { color: var(--result); font-weight: 500; }
+.wins tbody tr { cursor: pointer; }
+.wins tbody tr:hover td { background: color-mix(in srgb, var(--result) 7%, transparent); }
+.wins tbody tr.focused td { background: color-mix(in srgb, var(--result) 16%, transparent); font-weight: 600; }
+.wins tr.focused td:first-child { box-shadow: inset 3px 0 0 var(--result); padding-left: 8px; border-radius: 4px 0 0 4px; }
+.wins tr.focused td:last-child { padding-right: 8px; border-radius: 0 4px 4px 0; }
 .keys-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
 
 .legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; color: var(--muted); }
@@ -113,6 +118,9 @@ header { display: flex; flex-direction: column; gap: 14px; }
 
 .zone { cursor: pointer; }
 .grip { cursor: ew-resize; }
+#demo .titlebar { cursor: grab; }
+#demo line { pointer-events: none; }
+#demo.moving, #demo.moving * { cursor: grabbing; }
 .grip.ns { cursor: ns-resize; }
 
 table.rules { border-collapse: collapse; width: 100%; font-size: 14px; }
@@ -198,12 +206,17 @@ table.rules { border-collapse: collapse; width: 100%; font-size: 14px; }
 .hero-art > .mascot { position: absolute; width: clamp(150px, 36%, 220px); height: auto; right: 8px; top: -10px; transform: translateY(-80%) scaleX(-1); filter: drop-shadow(0 10px 12px rgba(20, 30, 20, .25)); pointer-events: none; }
 .hero-art { margin-top: 140px; }
 @media (max-width: 860px) { .hero-art { margin-top: 120px; } }
-.hero-art figcaption { margin-top: 10px; font-size: 13px; line-height: 1.6; color: var(--muted); }
-.hero-art #hero-cap { display: block; min-height: 3.2em; }
-.hero-steps { display: flex; gap: 6px; margin-bottom: 6px; }
+.hero-art figcaption { margin-top: 4px; font-size: 13px; line-height: 1.6; color: var(--muted); }
+.hero-art > svg:not(.mascot) { position: relative; z-index: 1; }
+.hero-art > .mascot { z-index: 2; }
+.hero-art #hero-cap { display: block; position: relative; z-index: 0; height: 4.8em; overflow: hidden; }
+.hero-art .hero-stack { position: absolute; left: 0; right: 0; bottom: 0; }
+.hero-art .hero-line { display: block; }
+.hero-steps { display: flex; gap: 6px; margin-top: 6px; }
 .hero-steps i { width: 18px; height: 4px; border-radius: 2px; background: var(--line); transition: background .3s; }
 .hero-steps i.on { background: var(--result); }
-.hero-art .caret { display: inline-block; width: 2px; height: 1.05em; margin-left: 1px; vertical-align: -.15em; background: var(--result); }
+.hero-art .caret { display: inline-block; width: 2px; height: 1.05em; margin-left: 1px; vertical-align: -.15em; background: var(--result); animation: caret-blink 1s steps(1) infinite; }
+@keyframes caret-blink { 50% { opacity: 0; } }
 code { font: .92em var(--font-mono); }
 kbd { font: 500 12px var(--font-mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 1px 7px; background: var(--panel); color: var(--fg); white-space: nowrap; }
 
@@ -258,7 +271,7 @@ html { scroll-behavior: smooth; }
       <figure class="hero-art">
         <img class="mascot" src="images/snappy-turtle.webp" width="1120" height="812" alt="Snappy, the Screen Snapper mascot: a grinning snapping turtle with an orange patch on its shell, pumping a fist">
         <svg id="hero-svg" viewBox="0 0 480 270" role="img" aria-label="Animation of Screen Snapper on a 4 by 2 grid: a window is dragged with Ctrl and snaps into a cell; a shared edge moves a grid line and the windows on it follow; Ctrl+Shift jumps the line back to the even eighths; an edge on the screen edge takes over the middle line; an off-grid window's edge snaps back onto the grid; and Super+Ctrl+G resets the grid."></svg>
-        <figcaption><span class="hero-steps" id="hero-steps" aria-hidden="true"></span><span id="hero-cap"><kbd>Ctrl</kbd> + drag the edge windows share: the grid line moves, and every window on it follows.</span></figcaption>
+        <figcaption><span id="hero-cap"></span><span class="hero-steps" id="hero-steps" aria-hidden="true"></span></figcaption>
       </figure>
     </div>
   </div>
@@ -330,7 +343,7 @@ html { scroll-behavior: smooth; }
           <div class="card" id="d-card" aria-live="polite">
             <div class="eyebrow">What happened</div>
             <div id="d-title" class="result-title">Nothing yet</div>
-            <div id="d-detail" class="hint">Drag a grip, or pick something from the list below.</div>
+            <div id="d-detail" class="hint">Click a window to bring it to the front, drag its title bar to move it, or drag an edge grip. Or pick something from the list below.</div>
           </div>
           <div class="card">
             <div class="eyebrow" id="d-wins-h">Windows</div>
@@ -345,6 +358,7 @@ html { scroll-behavior: smooth; }
     <div class="things">
       <h3 class="things-title">Things to try</h3>
       <ul class="things-grid">
+        <li><span class="do"><kbd>Ctrl</kbd> + drag a title bar</span><span>Move a window like on the desktop: an orange preview shows where it snaps when you let go.</span></li>
         <li><span class="do"><kbd>Ctrl</kbd> + drag an orange grip</span><span>The grid line moves, and every window on it follows.</span></li>
         <li><span class="do"><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + drag</span><span>The line snaps to the even eighths.</span></li>
         <li><span class="do">Drag with no keys</span><span>Only that window resizes, and it leaves the grid.</span></li>
@@ -684,7 +698,13 @@ function drawDemo() {
   svg.innerHTML = '';
   const pad = 30;
   svg.setAttribute('viewBox', `${-pad} ${-pad} ${S.w + pad * 2} ${S.h + pad * 2}`);
-  el('rect', { x: 0, y: 0, width: S.w, height: S.h, fill: 'var(--free)', stroke: 'var(--grid)', 'stroke-width': 4 }, svg);
+  // The desktop: clicking empty space unfocuses every window.
+  const desk = el('rect', { x: 0, y: 0, width: S.w, height: S.h, fill: 'var(--free)', stroke: 'var(--grid)', 'stroke-width': 4 }, svg);
+  desk.addEventListener('pointerdown', () => {
+    if (drag || moveDrag || !cur().focus) return;
+    cur().focus = null;
+    drawDemo();
+  });
 
   // The grid lines where they are now, dashed. While Ctrl+Shift snaps a
   // line, the even-eighths positions it snaps to show too.
@@ -715,16 +735,27 @@ function drawDemo() {
       if (sd === 'top') { const B = r.y + r.h; r.y = Math.min(v, B - MIN_CELL); r.h = B - r.y; }
       if (sd === 'bottom') r.h = Math.max(v - r.y, MIN_CELL);
     }
-    const changed = drag && startSizes.get(w.name) !== sizeText(r);
+    const changed = (drag || moveDrag) && startSizes.get(w.name) !== sizeText(r);
+    const focused = cur().focus === w.name;
+    // Each window is a group, drawn in stacking order (last on top). Clicking
+    // it focuses and raises it; its title bar moves it.
+    const wg = el('g', { class: 'win' + (focused ? ' focused' : '') }, svg);
     el('rect', {
       x: r.x + g, y: r.y + g, width: r.w - 2 * g, height: r.h - 2 * g, rx: 10, fill: 'var(--win)',
-      stroke: changed ? 'var(--result)' : 'var(--grid)', 'stroke-width': changed ? 6 : 3,
+      stroke: changed ? 'var(--result)' : focused ? 'var(--fg)' : 'var(--grid)', 'stroke-width': changed ? 6 : focused ? 4 : 3,
       ...(w.free ? { 'stroke-dasharray': '18 10' } : {}),
-    }, svg);
-    el('rect', { x: r.x + g, y: r.y + g, width: r.w - 2 * g, height: fs * 1.6, rx: 10, fill: 'var(--win-bar)' }, svg);
-    text(svg, r.x + g + 18, r.y + g + fs * 1.12, w.name, { fill: 'var(--fg)', 'font-weight': 600 });
-    text(svg, r.x + r.w / 2, r.y + r.h / 2 + fs * 0.4, sizeText(r), { 'text-anchor': 'middle', 'font-family': 'IBM Plex Mono, ui-monospace, monospace', fill: changed ? 'var(--result)' : 'var(--muted)' });
-    if (w.free) text(svg, r.x + r.w / 2, r.y + r.h / 2 + fs * 1.6, 'off the grid', { 'text-anchor': 'middle', 'font-size': fs * 0.8 });
+    }, wg);
+    el('rect', { class: 'titlebar', x: r.x + g, y: r.y + g, width: r.w - 2 * g, height: fs * 1.6, rx: 10, fill: focused ? 'var(--result)' : 'var(--win-bar)' }, wg);
+    text(wg, r.x + g + 18, r.y + g + fs * 1.12, w.name, { fill: focused ? 'var(--on-accent)' : 'var(--fg)', 'font-weight': 600, 'pointer-events': 'none' });
+    text(wg, r.x + r.w / 2, r.y + r.h / 2 + fs * 0.4, sizeText(r), { 'text-anchor': 'middle', 'font-family': 'IBM Plex Mono, ui-monospace, monospace', fill: changed ? 'var(--result)' : 'var(--muted)', 'pointer-events': 'none' });
+    if (w.free) text(wg, r.x + r.w / 2, r.y + r.h / 2 + fs * 1.6, 'off the grid', { 'text-anchor': 'middle', 'font-size': fs * 0.8, 'pointer-events': 'none' });
+    wg.addEventListener('pointerdown', e => {
+      if (e.target.closest('.grip') || drag || moveDrag) return;
+      const onBar = e.target.classList.contains('titlebar');
+      focusWin(w.name);
+      if (onBar) startMove(e, w);
+      else drawDemo();
+    });
 
     // One grip per side, just inside the window.
     for (const side of ['left', 'right', 'top', 'bottom']) {
@@ -734,7 +765,7 @@ function drawDemo() {
       const cx = side === 'left' ? r.x + inset : side === 'right' ? r.x + r.w - inset : r.x + r.w / 2;
       const cy = side === 'top' ? r.y + inset + fs * 1.7 : side === 'bottom' ? r.y + r.h - inset : r.y + r.h / 2;
       const len = Math.min(110, (vert ? r.h : r.w) * 0.35);
-      const grp = el('g', { class: 'grip' + (vert ? '' : ' ns'), tabindex: '0', role: 'button', 'aria-label': `${w.name}, ${side} edge` }, svg);
+      const grp = el('g', { class: 'grip' + (vert ? '' : ' ns'), tabindex: '0', role: 'button', 'aria-label': `${w.name}, ${side} edge` }, wg);
       if (vert) {
         el('rect', { x: cx - 36, y: cy - len / 2 - 20, width: 72, height: len + 40, fill: 'transparent' }, grp);
         el('rect', { x: cx - 11, y: cy - len / 2, width: 22, height: len, rx: 11, fill: outer ? 'var(--grid)' : 'var(--result)', stroke: 'var(--win)', 'stroke-width': 4 }, grp);
@@ -742,11 +773,114 @@ function drawDemo() {
         el('rect', { x: cx - len / 2 - 20, y: cy - 36, width: len + 40, height: 72, fill: 'transparent' }, grp);
         el('rect', { x: cx - len / 2, y: cy - 11, width: len, height: 22, rx: 11, fill: outer ? 'var(--grid)' : 'var(--result)', stroke: 'var(--win)', 'stroke-width': 4 }, grp);
       }
-      grp.addEventListener('pointerdown', e => startDrag(e, w, side));
+      grp.addEventListener('pointerdown', e => { if (drag || moveDrag) return; focusWin(w.name); startDrag(e, w, side); });
       grp.addEventListener('keydown', e => keyDrag(e, w, side));
     }
   }
+  // The snap preview while a window is moved with Ctrl, on top of everything.
+  if (moveDrag && moveDrag.preview) {
+    const r = rectFor(moveDrag.preview.l, moveDrag.preview.s);
+    el('rect', { x: r.x + g, y: r.y + g, width: r.w - 2 * g, height: r.h - 2 * g, rx: 10, fill: 'var(--result)', 'fill-opacity': 0.18, stroke: 'var(--result)', 'stroke-width': 6, 'stroke-dasharray': '24 12', 'pointer-events': 'none' }, svg);
+  }
   drawWinTable();
+}
+
+// ---- Windows as windows: focus, raise, and move by the title bar ----
+let moveDrag = null;   // { name, startPt, pt, rect0, snapshot, preview }
+function focusWin(name) {
+  const st = cur();
+  const i = st.wins.findIndex(w => w.name === name);
+  if (i >= 0) st.wins.push(...st.wins.splice(i, 1));
+  st.focus = name;
+}
+
+function startMove(e, w) {
+  e.preventDefault();
+  snapshotSizes();
+  const pt = svgCoord(e);
+  moveDrag = { name: w.name, startPt: pt, pt, rect0: { ...winRect(w) }, snapshot: structuredClone(cur()), preview: null, moved: false };
+  const svg = document.getElementById('demo');
+  svg.setPointerCapture(e.pointerId);
+  svg.classList.add('moving');
+  const move = ev => { moveDrag.pt = svgCoord(ev); applyMove(ev); };
+  const up = ev => {
+    svg.removeEventListener('pointermove', move);
+    svg.removeEventListener('pointerup', up);
+    svg.removeEventListener('pointercancel', up);
+    svg.classList.remove('moving');
+    finishMove(ev.type === 'pointerup' ? ev : null);
+  };
+  svg.addEventListener('pointermove', move);
+  svg.addEventListener('pointerup', up);
+  svg.addEventListener('pointercancel', up);
+  applyMove(e);
+}
+
+// Recomputed from the start of the move each time, with the keys held now.
+function applyMove(e) {
+  const d = moveDrag, S = SCREENS[orient];
+  state[orient][ws] = structuredClone(d.snapshot);
+  const w = cur().wins.find(x => x.name === d.name);
+  const dx = d.pt.x - d.startPt.x, dy = d.pt.y - d.startPt.y;
+  if (Math.hypot(dx, dy) > 6) d.moved = true;
+  if (d.moved) {
+    // Like a real window: free to go partly off screen, but the title bar
+    // stays reachable.
+    const r = { ...d.rect0 };
+    r.x = Math.round(Math.min(Math.max(r.x + dx, 120 - r.w), S.w - 120));
+    r.y = Math.round(Math.min(Math.max(r.y + dy, 0), S.h - 80));
+    w.free = r;
+  }
+  d.preview = null;
+  if (ctrlOn(e)) {
+    const land = orient === 'landscape';
+    const px = Math.min(Math.max(d.pt.x, 0), S.w), py = Math.min(Math.max(d.pt.y, 0), S.h);
+    const [lc, sc] = land ? [px, py] : [py, px];
+    const L = regions(posLong()).find(z => lc >= z.a && lc <= z.b);
+    const Sz = regions(posShort()).find(z => sc >= z.a && sc <= z.b);
+    const res = L && Sz ? resolve(L, Sz) : null;
+    if (res) d.preview = { l: res.l, s: res.s };
+  }
+  reportMove(w, d.preview ? 'preview' : ctrlOn(e) ? 'nosnap' : d.moved ? 'moved' : 'focus');
+  drawDemo();
+}
+
+function finishMove(e) {
+  const d = moveDrag;
+  if (!d) return;
+  const w = cur().wins.find(x => x.name === d.name);
+  if (e && d.preview && ctrlOn(e)) {
+    w.l = d.preview.l; w.s = d.preview.s; w.free = null;
+    reportMove(w, 'snapped');
+  } else if (d.moved) {
+    reportMove(w, 'moved');
+  }
+  moveDrag = null;
+  drawDemo();
+  drawMap(true);
+  drawCatalogue();
+}
+
+function reportMove(w, what) {
+  document.getElementById('d-card').classList.remove('blocked');
+  const t = document.getElementById('d-title'), det = document.getElementById('d-detail');
+  const name = sp => winName(sp).toLowerCase();
+  if (what === 'focus') {
+    t.textContent = `${w.name} is in front`;
+    det.textContent = 'Drag its title bar to move it. Hold Ctrl while moving to snap it into the grid.';
+  } else if (what === 'moved') {
+    t.textContent = `${w.name} moved`;
+    det.textContent = 'Without Ctrl the window just moves, and it is off the grid now: it won\'t follow line moves. Hold Ctrl while moving to snap it back.';
+  } else if (what === 'nosnap') {
+    t.textContent = `${w.name}: no snap here`;
+    det.textContent = 'Ctrl is held, but the open middle of a cell never snaps. Move the pointer into a band along a grid line or screen edge.';
+  } else if (what === 'preview') {
+    t.textContent = `Let go to snap ${w.name}`;
+    det.textContent = `With Ctrl held, dropping here gives ${name(moveDrag.preview)}. Release Ctrl first to just move it.`;
+  } else {
+    t.textContent = `${w.name} snapped`;
+    det.textContent = `${w.name} is on the grid: ${name({ l: w.l, s: w.s })}. It follows line moves again.`;
+  }
 }
 
 function svgCoord(e) {
@@ -1049,6 +1183,7 @@ function startDrag(e, w, side) {
 // the pointer doesn't move.
 function keysChanged() {
   if (drag) applyDrag(null);
+  if (moveDrag) applyMove(null);
 }
 
 // Keyboard: arrows move the focused edge, using the latched or held keys.
@@ -1085,16 +1220,28 @@ function drawWinTable() {
   document.getElementById('d-wins-h').textContent = `Windows on ${orient === 'landscape' ? 'the landscape monitor' : 'the portrait monitor'}, workspace ${ws + 1}`;
   const tb = document.getElementById('d-wins');
   tb.innerHTML = '';
-  for (const w of cur().wins) {
+  // Rows stay in a fixed order (the starting one), whatever the stacking.
+  const order = freshWorkspace(orient, ws).wins.map(w => w.name);
+  const rows = [...cur().wins].sort((a, b) => order.indexOf(a.name) - order.indexOf(b.name));
+  for (const w of rows) {
     const r = winRect(w);
     const tr = document.createElement('tr');
-    if (drag && startSizes.get(w.name) !== sizeText(r)) tr.className = 'changed';
+    if ((drag || moveDrag) && startSizes.get(w.name) !== sizeText(r)) tr.classList.add('changed');
+    if (cur().focus === w.name) tr.classList.add('focused');
+    // Clicking a row focuses and raises that window, as the desktop does.
+    tr.addEventListener('click', () => {
+      if (drag || moveDrag) return;
+      focusWin(w.name);
+      reportMove(w, 'focus');
+      drawDemo();
+    });
     tr.innerHTML = `<td>${w.name}</td><td>${w.free ? 'off grid' : 'on grid'}</td><td>${sizeText(r)}</td>`;
     tb.appendChild(tr);
   }
   // Anything different from the starting layout: the grid lines, a window's
   // cells, or a window off the grid.
-  const layout = st => JSON.stringify([st.grid, st.wins.map(w => [w.name, w.l, w.s, w.free])]);
+  // (Stacking order doesn't count: raising a window isn't a layout change.)
+  const layout = st => JSON.stringify([st.grid, st.wins.map(w => [w.name, w.l, w.s, w.free]).sort((a, b) => a[0] < b[0] ? -1 : 1)]);
   const changed = layout(cur()) !== layout(freshWorkspace(orient, ws));
   document.getElementById('d-reset').disabled = !changed;
 }
@@ -1370,15 +1517,16 @@ function heroAnimation() {
     wins: { Editor: { l: [1, 2], s: [1, 2] }, Browser: { l: [3, 3], s: [1, 1] }, Terminal: { l: [4, 4], s: [1, 2] }, Files: filesLoose },
   };
   const frames = [{ d: 0, s: start }];
-  // After each scene's change, its caption types out, holds, then fades.
-  const CHAR_MS = 32, HOLD_MS = 2000, FADE_MS = 450;
+  // Each scene starts with its caption typed out, a hold, and Enter; then
+  // the scene's action plays.
+  const CHAR_MS = 64, HOLD_MS = 2000, ENTER_MS = 400;   // ENTER_MS: a beat after Enter
   const plain = html => html.replace(/<[^>]*>/g, '');
   const explain = scene => frames.push({
-    d: plain(CAPS[scene]).length * CHAR_MS + HOLD_MS + FADE_MS,
-    s: frames[frames.length - 1].s, caption: scene,
+    d: plain(CAPS[scene]).length * CHAR_MS + HOLD_MS + ENTER_MS,
+    s: { ...frames[frames.length - 1].s, scene }, caption: scene,
   });
   const go = (d, patch) => {
-    if (patch.scene !== undefined && frames.length > 1) explain(frames[frames.length - 1].s.scene);
+    if (patch.scene > frames[frames.length - 1].s.scene) explain(patch.scene);
     const prev = frames[frames.length - 1].s;
     const s = { ...structuredClone(prev), ...structuredClone(patch) };
     if (patch.wins) s.wins = { ...structuredClone(prev.wins), ...structuredClone(patch.wins) };
@@ -1387,6 +1535,7 @@ function heroAnimation() {
   };
   const L = (v1, v2, v3) => ({ long: [v1, v2, v3] });
   // 1. Snap a loose window into a cell.
+  explain(0);
   go(700, {});
   go(250, { keys: 'Ctrl', drag: 'Files' });
   go(1300, { ptr: [300, 258], preview: { l: [3, 3], s: [2, 2] }, wins: { Files: { rect: { x: 235, y: 248, w: 130, h: 95 } } } });
@@ -1428,7 +1577,6 @@ function heroAnimation() {
   go(900, { grid: structuredClone(even) });
   go(400, { keys: '' });
   go(800, {});
-  explain(5);
   go(400, { fade: 0 });
   go(0, { ...structuredClone(start), fade: 0 });
   go(400, { fade: 1 });
@@ -1507,25 +1655,48 @@ function heroAnimation() {
     while (html.startsWith('</', i)) { const j = html.indexOf('>', i) + 1; out += html.slice(i, j); i = j; }
     return out;
   }
-  let capShown = null, capOpacity = null;
-  function setCaption(html, opacity) {
-    if (html !== capShown) { cap.innerHTML = html; capShown = html; }
-    if (opacity !== capOpacity) { cap.style.opacity = opacity; capOpacity = opacity; }
+  // A small console under the illustration: captions type on the bottom
+  // line in front of the cursor; Enter moves every line up by one at once, and lines
+  // pushed out of the top slip under the illustration and are removed.
+  const CARET = '<span class="caret"></span>';
+  const stack = document.createElement('div');
+  stack.className = 'hero-stack';
+  cap.textContent = '';
+  cap.appendChild(stack);
+  let active = null, activeHtml = null, entered = null;
+  function newLine() {
+    active = document.createElement('span');
+    active.className = 'hero-line';
+    stack.appendChild(active);
+    activeHtml = null;
+    setActive(CARET);
   }
-  function caption(scene, ms) {
+  function setActive(html) {
+    if (html !== activeHtml) { active.innerHTML = html; activeHtml = html; }
+  }
+  function enter(text) {
+    setActive(text);   // the finished line, without the cursor
+    newLine();   // the lines above jump up at once, as in a terminal
+    // Drop lines that have gone off the top.
+    const top = cap.getBoundingClientRect().top;
+    for (const el of [...stack.children]) if (el !== active && el.getBoundingClientRect().bottom < top) el.remove();
+  }
+  newLine();
+  // key: which caption segment this is, so Enter happens once per segment.
+  function caption(scene, ms, key) {
     const full = CAPS[scene], n = plain(full).length, typeMs = n * CHAR_MS;
-    if (ms < typeMs) return setCaption(typed(full, Math.floor(ms / CHAR_MS) + 1) + '<span class="caret"></span>', 1);
-    if (ms < typeMs + HOLD_MS) return setCaption(full, 1);
-    setCaption(full, Math.max(0, 1 - (ms - typeMs - HOLD_MS) / FADE_MS));
+    if (ms < typeMs) return setActive(typed(full, Math.floor(ms / CHAR_MS) + 1) + CARET);
+    if (ms < typeMs + HOLD_MS) return setActive(full + CARET);
+    if (entered !== key) { entered = key; enter(full); }
   }
 
   function at(ms) {
+    const loop = Math.floor(ms / total);
     let t = ms % total;
     for (let i = 1; i < frames.length; i++) {
       const f = frames[i];
       if (t < f.d) {
-        if (f.caption != null) caption(f.caption, t);
-        else setCaption('', 1);
+        if (f.caption != null) caption(f.caption, t, loop + ':' + i);
         return draw(frames[i - 1].s, f.s, ease(t / f.d));
       }
       t -= f.d;
@@ -1537,7 +1708,7 @@ function heroAnimation() {
     // A still: the grid line moved, mid-drag.
     const i = frames.findIndex(f => f.s.scene === 1 && f.s.grid.long[1] === 305);
     draw(frames[i].s, frames[i].s, 1);
-    setCaption(CAPS[1], 1);
+    setActive(CAPS[1] + CARET);
     return;
   }
   const t0 = performance.now();
