@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600&display=swap">
 <style>
-/* Layout: landing page. A full-bleed hero (logo, pitch, animated grid), three feature points, then the live demo badged as interactive, followed by the drop zone map, then the drop zone map (which follows the moved lines), rules, the 30-window catalogue, and how it all behaves. */
+/* Layout: landing page. A full-bleed hero (logo, pitch, animated grid), three feature points, then the live demo badged as interactive, followed by the drop zone map with the 30-window catalogue scrolling beside it (same height) and the readout cards below, then rules and how it all behaves. */
 :root {
   --bg: #f4f6f8;
   --panel: #ffffff;
@@ -121,9 +121,23 @@ table.rules { border-collapse: collapse; width: 100%; font-size: 14px; }
 .rules td .sw { vertical-align: -2px; margin-right: 8px; }
 .rules td.k { white-space: nowrap; font-family: var(--font-mono); font-size: 13px; }
 
+/* Map with the catalogue beside it: the map sets the row height, and the
+   catalogue scrolls within it. Stacks on narrow screens. */
+.map-layout { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: 20px; }
+.cat-panel { position: relative; min-width: 0; min-height: 360px; }
+.cat-scroll { position: absolute; inset: 0; overflow-y: auto; overscroll-behavior: contain; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 14px 18px; display: flex; flex-direction: column; gap: 10px; }
+.cat-scroll:focus-visible { outline: 3px solid var(--result); outline-offset: 2px; }
+.cat-title { margin: 0; font: 600 1.05rem var(--font-display); }
+#catalogue { display: flex; flex-direction: column; gap: 18px; }
+.readout-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 860px) {
+  .map-layout, .readout-row { grid-template-columns: 1fr; }
+  .cat-panel { min-height: 0; }
+  .cat-scroll { position: static; max-height: 70vh; }
+}
 .cat { display: flex; flex-direction: column; gap: 10px; }
 .cat h3 { margin: 0; font: 600 14px var(--font-body); color: var(--muted); }
-.minis { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.minis { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 10px; }
 .mini {
   background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px; cursor: pointer;
   display: flex; flex-direction: column; gap: 6px; text-align: left; font: inherit; color: inherit;
@@ -132,7 +146,7 @@ table.rules { border-collapse: collapse; width: 100%; font-size: 14px; }
 .mini svg { width: 100%; height: auto; display: block; }
 .mini .cap { font-size: 12.5px; line-height: 1.35; }
 .mini .px { font-size: 11.5px; color: var(--muted); }
-.minis.portrait { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
+.minis.portrait { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
 .notes { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; max-width: 78ch; }
 
 /* ---- Landing ---- */
@@ -334,12 +348,20 @@ html { scroll-behavior: smooth; }
   <section aria-labelledby="map-h">
     <h2 id="map-h">Drop zone map</h2>
     <p>Where you can drop a window with Ctrl held, using this monitor's and workspace's grid as it is now. Move a line above and the bands follow. Hover or tap a band to see the window it gives.</p>
-    <div class="work">
+    <div class="map-layout">
       <figure class="map-box">
         <svg id="map" role="img" aria-label="Drop zone map of one screen. Bands along each grid line and screen edge are drop zones; the open middle of each cell is free movement."></svg>
         <figcaption class="legend" id="legend"></figcaption>
       </figure>
-      <aside class="readout" aria-live="polite">
+      <div class="cat-panel">
+        <div class="cat-scroll" id="cat-scroll" role="region" aria-labelledby="all-h" tabindex="0">
+          <h3 id="all-h" class="cat-title">All 30 windows the grid allows</h3>
+          <p id="all-intro" class="hint"></p>
+          <div id="catalogue"></div>
+        </div>
+      </div>
+    </div>
+    <div class="readout-row" aria-live="polite">
         <div class="card">
           <div class="eyebrow">Pointer is in</div>
           <div id="r-zone" class="result-title"></div>
@@ -357,7 +379,6 @@ html { scroll-behavior: smooth; }
           <div class="eyebrow">Every band that gives this window</div>
           <ul class="zonelist" id="r-others"></ul>
         </div>
-      </aside>
     </div>
   </section>
 
@@ -367,7 +388,7 @@ html { scroll-behavior: smooth; }
       <table class="rules">
         <thead><tr><th>Keys</th><th>Edge on a grid line</th><th>Edge on the screen edge</th></tr></thead>
         <tbody>
-          <tr><td class="k">none</td><td>Resizes only that window, as today. The window leaves the grid and stops following line moves.</td><td>Resizes only that window and it leaves the grid.</td></tr>
+          <tr><td class="k">none</td><td>Resizes only that window, as usual. The window leaves the grid and stops following line moves.</td><td>Resizes only that window and it leaves the grid.</td></tr>
           <tr><td class="k">Ctrl</td><td>Moves the grid line across the whole monitor. Every grid window with an edge on it follows, live. The line stops 200 px from its neighbours and the screen edges.</td><td>Nothing moves.</td></tr>
           <tr><td class="k">Ctrl+Shift</td><td>Same, but the line jumps between the even-eighths positions, so it is easy to put back exactly.</td><td>Nothing moves.</td></tr>
         </tbody>
@@ -388,11 +409,6 @@ html { scroll-behavior: smooth; }
     </div>
   </section>
 
-  <section aria-labelledby="all-h">
-    <h2 id="all-h">All 30 windows the grid allows</h2>
-    <p id="all-intro"></p>
-    <div id="catalogue" style="display:flex;flex-direction:column;gap:22px"></div>
-  </section>
 
   <section aria-labelledby="impl-h">
     <h2 id="impl-h">How it behaves on the desktop</h2>
@@ -1126,7 +1142,10 @@ function drawCatalogue() {
       b.appendChild(px);
       b.addEventListener('click', () => {
         selectKey(b.dataset.key);
-        document.getElementById('map').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
+        // Side by side the map is already in view; when stacked, bring it up.
+        const m = document.getElementById('map').getBoundingClientRect();
+        if (m.top < 0 || m.bottom > innerHeight)
+          document.getElementById('map').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'nearest' });
       });
       gridEl.appendChild(b);
     }
@@ -1135,7 +1154,20 @@ function drawCatalogue() {
   }
 }
 function selectMini(key) {
-  document.querySelectorAll('.mini').forEach(b => b.setAttribute('aria-pressed', b.dataset.key === key ? 'true' : 'false'));
+  let picked = null;
+  document.querySelectorAll('.mini').forEach(b => {
+    const on = b.dataset.key === key;
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    if (on) picked = b;
+  });
+  // Keep the picked window visible in the catalogue, scrolling only the
+  // catalogue (never the page).
+  const box = document.getElementById('cat-scroll');
+  if (picked && box) {
+    const b = picked.getBoundingClientRect(), c = box.getBoundingClientRect();
+    if (b.top < c.top + 8) box.scrollTop -= c.top + 8 - b.top;
+    else if (b.bottom > c.bottom - 8) box.scrollTop += b.bottom - (c.bottom - 8);
+  }
 }
 
 function render(resetSelection) {

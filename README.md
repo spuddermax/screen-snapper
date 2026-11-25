@@ -36,9 +36,10 @@ Letting go of Ctrl before you drop cancels the snap.
 Together these reach all 30 rectangles the grid allows.
 
 ![Drop zone map: colored bands along every grid line and screen edge. The
-pointer is on the crossing of the first column line and the middle line, and
-the dashed outline shows the window covering columns 1–2 in both
-rows.](docs/images/drop-map.png)
+pointer is on the crossing of the first column line and the middle line, the
+dashed outline shows the window covering columns 1–2 in both rows, and the
+list of all 30 windows beside the map has that window
+picked.](docs/images/drop-map.png)
 
 Cinnamon's own edge tiling is turned off while the extension is enabled and
 turned back on when you disable it. Super+arrow keyboard tiling still works.
