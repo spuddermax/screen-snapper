@@ -1362,7 +1362,9 @@ function heroAnimation() {
     wins: { Editor: { l: [1, 2], s: [1, 2] }, Browser: { l: [3, 3], s: [1, 1] }, Terminal: { l: [4, 4], s: [1, 2] }, Files: filesLoose },
   };
   const frames = [{ d: 0, s: start }];
+  const READ_MS = 10000;   // extra hold at the end of each scene, for reading
   const go = (d, patch) => {
+    if (patch.scene !== undefined && frames.length > 1) frames.push({ d: READ_MS, s: frames[frames.length - 1].s });
     const prev = frames[frames.length - 1].s;
     const s = { ...structuredClone(prev), ...structuredClone(patch) };
     if (patch.wins) s.wins = { ...structuredClone(prev.wins), ...structuredClone(patch.wins) };
@@ -1412,6 +1414,7 @@ function heroAnimation() {
   go(900, { grid: structuredClone(even) });
   go(400, { keys: '' });
   go(800, {});
+  go(READ_MS, {});
   go(400, { fade: 0 });
   go(0, { ...structuredClone(start), fade: 0 });
   go(400, { fade: 1 });
